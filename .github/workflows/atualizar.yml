@@ -4,6 +4,9 @@ on:
   schedule:
     - cron: "17 3 * * *"   # todo dia às 00:17 (horário de Brasília), logo após o fechamento do candle diário
   workflow_dispatch:        # botão "Run workflow" para rodar na hora
+  push:                     # roda sozinho quando o script ou o workflow mudam
+    branches: [main]
+    paths: ["rastreador.py", ".github/workflows/atualizar.yml"]
 
 permissions:
   contents: write
