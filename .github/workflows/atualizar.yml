@@ -14,6 +14,7 @@ permissions:
 jobs:
   atualizar:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,6 +22,8 @@ jobs:
           python-version: "3.12"
       - name: Calcular tendências
         run: python rastreador.py
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
       - name: Salvar resultado
         run: |
           git config user.name "github-actions[bot]"

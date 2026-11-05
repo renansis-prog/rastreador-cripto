@@ -29,6 +29,11 @@ body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);
 .wrap{max-width:980px;margin:0 auto;display:grid;gap:18px}
 h1{margin:0;font-size:1.7rem;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
 .sub{color:var(--muted);font-size:.88rem}
+.clima{border-radius:10px;padding:10px 12px;font-size:.9rem;border:1px solid var(--line);background:var(--card)}
+.clima b{font-weight:800}
+.clima.alta{border-color:var(--alta);background:var(--alta-bg)}
+.clima.baixa{border-color:var(--baixa);background:var(--baixa-bg)}
+.clima.transicao{border-color:var(--lat);background:var(--lat-bg)}
 .aviso{background:var(--lat-bg);color:var(--fg);border:1px solid var(--lat);border-radius:10px;padding:10px 12px;font-size:.88rem}
 .faixas{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .faixa{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px;cursor:pointer;text-align:left;color:var(--fg);font:inherit}
@@ -67,6 +72,7 @@ summary{cursor:pointer;font-weight:600}
     <h1>Rastreador de Criptos</h1>
     <div class="sub" id="sub">Carregando dados…</div>
   </header>
+  <div class="clima" id="clima" hidden></div>
   <div class="aviso" id="aviso" hidden></div>
   <div class="faixas" id="faixas"></div>
   <div class="filtros">
@@ -76,7 +82,9 @@ summary{cursor:pointer;font-weight:600}
       <option value="ret_7d">Retorno 7d</option>
       <option value="ret_30d">Retorno 30d</option>
       <option value="ret_90d">Retorno 90d</option>
+      <option value="vs_btc_30d">Força vs BTC</option>
       <option value="volume_24h">Volume 24h</option>
+      <option value="rank">Market cap (ranking)</option>
     </select>
   </div>
   <div class="lista" id="lista"></div>
@@ -84,17 +92,18 @@ summary{cursor:pointer;font-weight:600}
     <summary>Como a nota é calculada</summary>
     <p>Cada moeda ganha pontos por sinal de tendência de alta no gráfico diário:</p>
     <ul>
-      <li>Preço acima da MM20: 15 · acima da MM50: 20 · acima da MM200: 20</li>
+      <li>Preço acima da MM20: 10 · acima da MM50: 15 · acima da MM200: 20</li>
       <li>MM50 acima da MM200 (cruzamento dourado): 15</li>
       <li>MM50 subindo nos últimos 10 dias: 10</li>
-      <li>Retorno positivo em 30 dias: 10 · em 90 dias: 10</li>
+      <li>Subiu mais que o BTC em 30 dias: 15</li>
+      <li>Retorno positivo em 30 dias: 10 · em 90 dias: 5</li>
     </ul>
-    <p>80+ = alta forte · 60–79 = alta · 40–59 = lateral · abaixo de 40 = baixa. RSI acima de 70 aparece como alerta de sobrecompra (subiu rápido demais). Só entram pares em USDT com volume mínimo em 24h, sem stablecoins. É uma triagem, não recomendação de compra.</p>
+    <p>80+ = alta forte · 60–79 = alta · 40–59 = lateral · abaixo de 40 = baixa. RSI acima de 70 aparece como alerta de sobrecompra (subiu rápido demais). Só entram moedas entre as 300 maiores por market cap, com par em USDT na Binance e volume mínimo em 24h, sem stablecoins. Os preços são a média de todas as corretoras (CoinGecko). O clima do mercado olha o BTC: quando ele está abaixo da MM200, a maioria das altcoins também cai, mesmo as de nota alta. É uma triagem, não recomendação de compra.</p>
   </details>
 </div>
 <script>
 const $ = s => document.querySelector(s);
-const CRIT = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_30d:"30d +",alta_90d:"90d +"};
+const CRIT = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_30d:"30d +",alta_90d:"90d +",forte_vs_btc:"> BTC 30d"};
 const FAIXAS = ["Alta forte","Alta","Lateral","Baixa"];
 let dados = [], faixaSel = null;
 
@@ -113,16 +122,17 @@ function spark(s){
 function render(){
   const q = $("#busca").value.trim().toUpperCase(), ord = $("#ordem").value;
   let l = dados.filter(m => (!q || m.moeda.includes(q)) && (!faixaSel || m.classe === faixaSel));
-  l.sort((a,b) => (b[ord] ?? -1e9) - (a[ord] ?? -1e9) || (b.ret_30d ?? 0) - (a.ret_30d ?? 0));
+  const sinal = ord === "rank" ? -1 : 1;
+  l.sort((a,b) => sinal*((b[ord] ?? -1e9*sinal) - (a[ord] ?? -1e9*sinal)) || (b.ret_30d ?? 0) - (a.ret_30d ?? 0));
   $("#lista").innerHTML = l.length ? l.map(m => {
     const c = m.classe.replace(" ","-");
     const rsiTag = m.rsi14 > 70 ? `<span class="tag c-Lateral">RSI ${m.rsi14.toFixed(0)} · esticada</span>` : m.rsi14 < 30 ? `<span class="tag c-Baixa">RSI ${m.rsi14.toFixed(0)}</span>` : "";
     return `<div class="moeda">
       <div class="nota c-${c}" title="${m.classe}">${m.nota}</div>
       <div class="nome"><strong>${m.moeda}</strong><span class="tag c-${c}">${m.classe}</span>${rsiTag}
-        <div class="preco">US$ ${preco(m.preco)} · vol 24h US$ ${vol(m.volume_24h)}${m.historico_curto?" · histórico &lt; 200 dias":""}</div></div>
+        <div class="preco">#${m.rank} · US$ ${preco(m.preco)} · vol 24h US$ ${vol(m.volume_24h)}${m.historico_curto?" · histórico &lt; 200 dias":""}</div></div>
       ${spark(m.sparkline)}
-      <div class="rets"><span><em>7d</em>${pct(m.ret_7d)}</span><span><em>30d</em>${pct(m.ret_30d)}</span><span><em>90d</em>${pct(m.ret_90d)}</span><span><em>vs MM200</em>${pct(m.dist_mm200)}</span></div>
+      <div class="rets"><span><em>7d</em>${pct(m.ret_7d)}</span><span><em>30d</em>${pct(m.ret_30d)}</span><span><em>90d</em>${pct(m.ret_90d)}</span><span><em>vs BTC 30d</em>${pct(m.vs_btc_30d)}</span><span><em>vs MM200</em>${pct(m.dist_mm200)}</span></div>
       <div class="crit">${Object.entries(CRIT).map(([k,t])=>`<span class="${m.criterios[k]?'ok':''}">${m.criterios[k]?'✓':'·'} ${t}</span>`).join("")}</div>
     </div>`;}).join("") : `<div class="vazio">Nenhuma moeda com esse filtro.</div>`;
 }
@@ -135,7 +145,15 @@ function faixas(){
 function carregar(j, exemplo){
   dados = j.moedas || [];
   const d = new Date(j.atualizado_em);
-  $("#sub").textContent = `${dados.length} moedas · Binance, gráfico diário · atualizado em ${d.toLocaleString("pt-BR")}`;
+  const c = j.mercado;
+  if (c && c.estado && c.estado !== "indefinido"){
+    const t = {alta:["Mercado em alta","o BTC está acima da média de 200 dias, com a MM50 acima da MM200. Sinais de alta tendem a funcionar melhor."],
+      baixa:["Mercado em baixa","o BTC está abaixo da média de 200 dias. Nesse clima até moedas de nota alta costumam cair junto; cautela redobrada."],
+      transicao:["Mercado em transição","o BTC está entre os sinais de alta e de baixa. Tendências ainda não confirmadas."]}[c.estado];
+    const el = $("#clima"); el.hidden = false; el.className = "clima " + c.estado;
+    el.innerHTML = `<b>${t[0]}</b>: ${t[1]} (BTC ${c.btc_dist_mm200>=0?"+":""}${c.btc_dist_mm200.toFixed(1)}% vs MM200)`;
+  }
+  $("#sub").textContent = `${dados.length} moedas · CoinGecko, filtradas pela Binance · gráfico diário · atualizado em ${d.toLocaleString("pt-BR")}`;
   if (exemplo){ const a = $("#aviso"); a.hidden = false; a.textContent = "Dados de exemplo: o arquivo data.json ainda não foi gerado. Rode o workflow \"Atualizar rastreador\" no GitHub para ver as moedas reais."; }
   faixas(); render();
 }
