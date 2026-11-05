@@ -1,0 +1,38 @@
+name: Backtest
+
+on:
+  workflow_dispatch:          # botão "Run workflow"
+  schedule:
+    - cron: "41 4 1 * *"      # dia 1 de cada mês, 01:41 (Brasília)
+  push:
+    branches: [main]
+    paths: ["backtest.py"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dados                # não roda ao mesmo tempo que o rastreador diário
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Rodar backtest
+        run: python backtest.py
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+      - name: Salvar resultado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/backtest.json
+          git diff --cached --quiet || git commit -m "Atualiza backtest $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push
