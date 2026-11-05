@@ -79,7 +79,11 @@ def universo():
                 return [(m["moeda"], m.get("id")) for m in moedas][:MAX_UNIVERSO], "painel atual (CoinGecko)"
         except Exception:  # noqa: BLE001
             pass
-    tickers = http_json(f"{BINANCE}/api/v3/ticker/24hr")
+    try:
+        tickers = http_json(f"{BINANCE}/api/v3/ticker/24hr")
+    except Exception as e:  # noqa: BLE001
+        raise SystemExit(f"Binance indisponível ({e}) e o painel ainda não tem dados. "
+                         "Rode primeiro o workflow 'Atualizar rastreador' e depois o Backtest.")
     stables = {s.upper() for s in R.STABLES}
     lista = []
     for t in tickers:
