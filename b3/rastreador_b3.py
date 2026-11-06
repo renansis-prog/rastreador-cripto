@@ -99,7 +99,10 @@ def coletar_fundamentus() -> pd.DataFrame:
     if r is None:
         raise RuntimeError(f"Fundamentus não respondeu: {erro}")
     r.encoding = "iso-8859-1"
-    tabelas = pd.read_html(io.StringIO(r.text), decimal=",", thousands=".")
+    # lê tudo como texto e converte com num_br: deixar o pandas adivinhar os números
+    # multiplicava por 100 colunas como "0,58"
+    cab = next(t for t in pd.read_html(io.StringIO(r.text)) if any(chave(c) == "papel" for c in t.columns)).columns
+    tabelas = pd.read_html(io.StringIO(r.text), thousands=None, converters={c: str for c in cab})
     df = next(t for t in tabelas if any(chave(c) == "papel" for c in t.columns))
     mapa = {}
     for c in df.columns:
