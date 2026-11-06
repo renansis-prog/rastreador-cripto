@@ -63,7 +63,7 @@ Mesmo princípio, para ações da B3, juntando **fundamentos** (Fundamentus) e *
 Neutra (fundamentos 40–59) · Evitar (fundamentos < 40).
 
 **Fundamentos (0–100):** P/L 0–15 (15) · P/VP ≤ 2 (10) · EV/EBIT 0–10 (15) · ROE ≥ 15% (15) · ROIC ≥ 10% (10) ·
-margem líquida ≥ 10% (10) · dívida bruta ≤ 1× patrimônio (10) · receita +5% a.a. em 5 anos (10) · DY ≥ 4% (5).
+margem líquida ≥ 10% (10) · dívida líquida ≤ 1× patrimônio (10) · receita +5% a.a. em 5 anos (10) · DY ≥ 4% (5).
 Bancos e seguradoras: só os critérios que se aplicam. Prejuízo limita a nota a 30.
 
 O backtest mede só a parte técnica (com caixa rendendo CDI), porque o Fundamentus não tem histórico dos indicadores.

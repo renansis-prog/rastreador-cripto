@@ -2,7 +2,7 @@ name: B3 - backtest
 
 on:
   schedule:
-    - cron: "53 5 2 * *"      # dia 2 de cada mês, 02:53 (Brasília)
+    - cron: "53 5 2 * *"      # dia 2 de cada mês, 02:53 (Brasília), depois de um dia de dados novos
   workflow_dispatch:
   push:
     branches: [main]

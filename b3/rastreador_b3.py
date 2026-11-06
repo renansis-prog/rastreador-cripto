@@ -80,14 +80,24 @@ def limpo(v):
 COLUNAS = {
     "papel": "papel", "cotacao": "cotacao", "pl": "p/l", "pvp": "p/vp", "dy": "divyield",
     "ev_ebit": "ev/ebit", "mrg_liq": "mrgliq", "roic": "roic", "roe": "roe",
-    "liquidez": "liq2meses", "patrimonio": "patrimliq", "div_pat": "divbrut/patrim",
+    "liquidez": "liq2meses", "patrimonio": "patrimliq", "div_pat": "divliq/patrim",
     "cresc_rec_5a": "crescrec5a",
 }
 
 
 def coletar_fundamentus() -> pd.DataFrame:
-    r = requests.get(FUNDAMENTUS_URL, headers=UA, timeout=60)
-    r.raise_for_status()
+    r, erro = None, None
+    for tentativa in range(4):                  # o site às vezes demora para responder
+        try:
+            r = requests.get(FUNDAMENTUS_URL, headers=UA, timeout=45)
+            r.raise_for_status()
+            break
+        except requests.RequestException as e:
+            erro, r = e, None
+            print(f"Fundamentus: tentativa {tentativa + 1} falhou ({type(e).__name__}); tentando de novo")
+            time.sleep(20 * (tentativa + 1))
+    if r is None:
+        raise RuntimeError(f"Fundamentus não respondeu: {erro}")
     r.encoding = "iso-8859-1"
     tabelas = pd.read_html(io.StringIO(r.text), decimal=",", thousands=".")
     df = next(t for t in tabelas if any(chave(c) == "papel" for c in t.columns))
@@ -127,7 +137,7 @@ CRITERIOS_FUND = [
     ("roe_ok", 15, "ROE de 15%+", True),
     ("roic_ok", 10, "ROIC de 10%+", False),
     ("margem_ok", 10, "Margem líquida de 10%+", False),
-    ("divida_ok", 10, "Dívida bruta até 1× o patrimônio", False),
+    ("divida_ok", 10, "Dívida líquida até 1× o patrimônio", False),
     ("cresc_ok", 10, "Receita crescendo 5%+ ao ano (5 anos)", True),
     ("dy_ok", 5, "Dividendos de 4%+", True),
 ]
@@ -147,7 +157,7 @@ def nota_fundamental(f: dict):
         "roe_ok": roe is not None and roe >= 15,
         "roic_ok": roic is not None and roic >= 10,
         "margem_ok": mrg is not None and mrg >= 10,
-        "divida_ok": div is not None and 0 <= div <= 1,
+        "divida_ok": div is not None and div <= 1,      # negativa = mais caixa que dívida
         "cresc_ok": cr is not None and cr >= 5,
         "dy_ok": dy is not None and dy >= 4,
     }
