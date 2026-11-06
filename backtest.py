@@ -19,6 +19,9 @@ Estratégias comparadas:
 
 Também mede, por faixa de nota, quanto as moedas renderam nos 7 e 30 dias seguintes.
 
+Resultados em reais (dólar PTAX do Banco Central) e comparados com o CDI (também do Banco Central).
+Se o Banco Central não responder, os resultados ficam em dólar, sem o CDI.
+
 Saída: docs/backtest.json (lido por docs/backtest.html).
 """
 import json
@@ -123,6 +126,47 @@ def baixar_tudo():
         if i % 20 == 0:
             print(f"  {i}/{len(moedas)}")
     return hist, fonte, origem_universo
+
+
+def bcb_serie(codigo, inicio, fim):
+    """Série diária do Banco Central (SGS): {AAAA-MM-DD: valor}. 12 = CDI (% ao dia), 1 = dólar PTAX venda."""
+    out = {}
+    ano = int(inicio[:4])
+    while ano <= int(fim[:4]):              # pede ano a ano (a API limita o intervalo)
+        di = max(inicio, f"{ano}-01-01"); df = min(fim, f"{ano}-12-31")
+        url = (f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados?formato=json"
+               f"&dataInicial={di[8:]}/{di[5:7]}/{di[:4]}&dataFinal={df[8:]}/{df[5:7]}/{df[:4]}")
+        for tentativa in range(3):
+            try:
+                for r in http_json(url):
+                    d, m, a_ = r["data"].split("/")
+                    out[f"{a_}-{m}-{d}"] = float(r["valor"])
+                break
+            except Exception:  # noqa: BLE001
+                if tentativa == 2:
+                    raise
+                time.sleep(3)
+        ano += 1
+    return out
+
+
+def em_reais(datas, inicio):
+    """Câmbio diário (com fins de semana preenchidos) e curva do CDI, alinhados às datas do teste."""
+    cdi = bcb_serie(12, datas[inicio], datas[-1])
+    dolar = bcb_serie(1, datas[inicio - 10] if inicio >= 10 else datas[0], datas[-1])
+    if not cdi or not dolar:
+        raise RuntimeError("séries vazias")
+    fx, ult = [], None
+    primeiro = dolar[min(dolar)]
+    for d in datas[inicio:]:
+        ult = dolar.get(d, ult)
+        fx.append(ult if ult is not None else primeiro)
+    curva_cdi, v = [], 100.0
+    for k, d in enumerate(datas[inicio:]):
+        if k > 0 and d in cdi:
+            v *= 1 + cdi[d] / 100
+        curva_cdi.append(v)
+    return fx, curva_cdi
 
 
 # ---------------- Simulação ----------------
@@ -277,14 +321,28 @@ def main():
         ("todas", "Todas as moedas (média)", "Pesos iguais em todas as moedas do universo, rebalanceado toda semana.", REBALANCEAR_A_CADA, False),
         ("top", f"Top {TOP_N} da nota", f"As {TOP_N} moedas de maior nota, trocadas toda semana.", REBALANCEAR_A_CADA, False),
         ("top_clima_saida", f"Top {TOP_N} + clima + saída na MM50", "Igual ao Top 10, mas só investe com o BTC em alta e vende a moeda que fecha abaixo da MM50.", REBALANCEAR_A_CADA, True),
-        ("btc_tendencia", "BTC só em tendência", "Fica em Bitcoin quando ele está acima da MM200; abaixo, fica em caixa. Checado toda semana.", REBALANCEAR_A_CADA, False),
+        ("btc_tendencia", "BTC só em tendência", "Fica em Bitcoin quando ele está acima da MM200; abaixo, fica em caixa (USDT). Checado toda semana.", REBALANCEAR_A_CADA, False),
         ("forte_btc", "Força vs BTC obrigatória", "Até 10 altcoins com nota 60+ que superam o BTC em 30 e 90 dias, 10% cada; vagas vazias ficam em BTC.", REBALANCEAR_A_CADA, False),
         ("nucleo", "Núcleo BTC + satélites", "50% sempre em BTC; o resto em até 5 altcoins do critério anterior (10% cada).", REBALANCEAR_A_CADA, False),
         ("top_mensal", f"Top {TOP_N} mensal", f"As {TOP_N} de maior nota, trocadas a cada 4 semanas.", 4 * REBALANCEAR_A_CADA, False),
     ]
+    try:
+        fx, curva_cdi = em_reais(datas, inicio)
+        moeda = "BRL"
+        print(f"Convertendo para reais · dólar {fx[0]:.2f} → {fx[-1]:.2f} · CDI no período {curva_cdi[-1] - 100:.1f}%")
+    except Exception as e:  # noqa: BLE001
+        print("Banco Central indisponível, resultados ficam em dólar:", e)
+        fx, curva_cdi, moeda = None, None, "USD"
+
     curvas, tabela = {}, []
+    if curva_cdi:
+        curvas["cdi"] = curva_cdi
+        tabela.append({"id": "cdi", "nome": "CDI", "regra": "Renda fixa sem risco: 100% do CDI, dado diário do Banco Central.",
+                       **metricas(curva_cdi, datas)})
     for k, nome, regra, periodo, saida in estrategias:
         c = simular(datas, S, notas, clima, btc_info, mm50, inicio, k, periodo, saida)
+        if fx:   # valor em dólar × variação do câmbio = valor em reais
+            c = [v * fx[n] / fx[0] for n, v in enumerate(c)]
         curvas[k] = c
         tabela.append({"id": k, "nome": nome, "regra": regra, **metricas(c, datas)})
         print(f"  {nome}: {tabela[-1]['retorno_total']:.1f}%  queda máx {tabela[-1]['queda_maxima']:.1f}%")
@@ -322,6 +380,7 @@ def main():
         "periodo": {"inicio": datas[inicio], "fim": datas[-1], "dias": len(datas) - inicio},
         "parametros": {"top_n": TOP_N, "rebalancear_dias": REBALANCEAR_A_CADA, "taxa": TAXA},
         "clima_dias_em_alta_pct": 100 * dias_alta / len(clima),
+        "moeda": moeda,
         "estrategias": tabela,
         "curvas": {"datas": datas[inicio::passo] + ([datas[-1]] if (len(datas) - 1 - inicio) % passo else []),
                    **{k: [round(v, 2) for v in (c[::passo] + ([c[-1]] if (len(c) - 1) % passo else []))]

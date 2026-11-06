@@ -70,9 +70,9 @@ td:first-child{font-family:var(--f-body);font-weight:600}
 </div>
 <script>
 const $ = s => document.querySelector(s);
-const COR = {btc:"var(--s1)", todas:"var(--s2)", top:"var(--s3)", top_clima_saida:"var(--s4)", btc_tendencia:"var(--s5)", forte_btc:"var(--s6)", nucleo:"var(--s7)", top_mensal:"var(--s8)", top_clima:"var(--s5)"};
-const VIS = new Set(["btc","top","btc_tendencia","forte_btc","nucleo","top_mensal"]);
-const BASE = new Set(["btc","todas"]);
+const COR = {cdi:"var(--fg)", btc:"var(--s1)", todas:"var(--s2)", top:"var(--s3)", top_clima_saida:"var(--s4)", btc_tendencia:"var(--s5)", forte_btc:"var(--s6)", nucleo:"var(--s7)", top_mensal:"var(--s8)", top_clima:"var(--s5)"};
+const VIS = new Set(["cdi","btc","top","btc_tendencia","forte_btc","nucleo","top_mensal"]);
+const BASE = new Set(["cdi","btc","todas"]);
 const pct = (v,d=1) => v==null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(d)}%</span>`;
 const pctTxt = v => v==null ? "—" : `${v>=0?'+':''}${v.toFixed(1)}%`;
 const dataBR = s => s.split("-").reverse().join("/");
@@ -91,7 +91,7 @@ function grafico(j){
   ticks.forEach(v => { s += `<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${m.l-6}" y="${y(v)+4}" text-anchor="end">${v>=1000?(v/1000)+'k':v}</text>`; });
   if (todos.some(v=>v<=100) && todos.some(v=>v>=100)) s += `<line x1="${m.l}" x2="${W-m.r}" y1="${y(100)}" y2="${y(100)}" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1"/>`;
   const nt = W < 500 ? 3 : 5; for (let k=0;k<=nt;k++){ const i = Math.round(k/nt*(n-1)); const d = C.datas[i].split("-"); s += `<text x="${x(i)}" y="${H-8}" text-anchor="${k===0?'start':k===nt?'end':'middle'}">${d[1]}/${d[0].slice(2)}</text>`; }
-  ids.forEach(k => { s += `<polyline fill="none" stroke="${COR[k]}" stroke-width="2" stroke-linejoin="round" points="${C[k].map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}"/>`; });
+  ids.forEach(k => { s += `<polyline fill="none" stroke="${COR[k]}" stroke-width="2"${k==="cdi"?' stroke-dasharray="6 4"':""} stroke-linejoin="round" points="${C[k].map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}"/>`; });
   ids.forEach(k => { const v = C[k][n-1]; s += `<circle cx="${x(n-1)}" cy="${y(v)}" r="4" fill="${COR[k]}" stroke="var(--card)" stroke-width="2"/>`; });
   s += `<line id="cross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
   s += `<rect id="hit" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/></svg>`;
@@ -105,6 +105,8 @@ function render(j){
   const cand = j.estrategias.filter(e=>!BASE.has(e.id));
   const btc = E.btc, melhorTop = [...cand].sort((a,b)=>b.retorno_total-a.retorno_total)[0];
   const venceu = melhorTop.retorno_total > btc.retorno_total;
+  const cdi = E.cdi, moeda = j.moeda === "BRL" ? "R$" : "US$";
+  const acimaCdi = cdi ? cand.filter(e => e.retorno_total > cdi.retorno_total) : [];
   const menorQueda = [...cand].sort((a,b)=>b.queda_maxima-a.queda_maxima)[0];
   const F = Object.fromEntries(j.faixas.map(f=>[f.faixa,f]));
   const prev = F["Alta forte"].d30 && F["Baixa"].d30 ? F["Alta forte"].d30.media - F["Baixa"].d30.media : null;
@@ -113,16 +115,17 @@ function render(j){
   $("#conteudo").outerHTML = `
   <section class="card veredito">
     <h2>Resultado</h2>
+    ${cdi ? `<p><b>Contra o CDI</b> (${pctTxt(cdi.retorno_total)} no período, ${pctTxt(cdi.retorno_anual)} ao ano): ${acimaCdi.length ? `${acimaCdi.length} de ${cand.length} estratégias renderam mais. A melhor, <b>${melhorTop.nome}</b>, fez ${pctTxt(melhorTop.retorno_anual)} ao ano, mas caiu ${pctTxt(melhorTop.queda_maxima)} no pior momento; o CDI nunca cai.` : `nenhuma estratégia de análise técnica rendeu mais que o CDI, e todas tiveram quedas fortes no caminho.`}</p>` : `<p>Resultados em dólar: o Banco Central não respondeu, então não há comparação com o CDI nesta rodada.</p>`}
     <p>${venceu ? `A melhor estratégia de análise técnica (<b>${melhorTop.nome}</b>) rendeu <b>${pctTxt(melhorTop.retorno_total)}</b>, contra <b>${pctTxt(btc.retorno_total)}</b> de quem só segurou Bitcoin.` : `Nenhuma estratégia de análise técnica superou o Bitcoin no período: a melhor (<b>${melhorTop.nome}</b>) rendeu <b>${pctTxt(melhorTop.retorno_total)}</b>, contra <b>${pctTxt(btc.retorno_total)}</b> do BTC.`}</p>
     <p>Menor queda máxima entre as estratégias: <b>${menorQueda.nome}</b>, com ${pctTxt(menorQueda.queda_maxima)} (BTC: ${pctTxt(btc.queda_maxima)}).</p>
     ${prev!=null ? `<p>Poder de previsão: nos 30 dias seguintes, moedas em "Alta forte" renderam em média ${pctTxt(F["Alta forte"].d30.media)}, e as em "Baixa", ${pctTxt(F["Baixa"].d30.media)}. ${prev>0?"A nota separou as moedas na direção certa.":"A nota <b>não</b> separou as moedas na direção certa nesse período."}</p>`:""}
   </section>
   <div class="aviso">Leia com cautela. O teste usa as moedas que existem <b>hoje</b>, então deixa de fora as que sumiram no caminho, e isso deixa o resultado mais bonito do que seria na vida real. Também só cobre ${Math.round(j.periodo.dias/30)} meses, com o mercado em alta em ${Math.round(j.clima_dias_em_alta_pct)}% dos dias. Rendimento passado não garante rendimento futuro.</div>
   <section class="card">
-    <h2>Quanto viraram R$ 100</h2>
+    <h2>Quanto viraram ${j.moeda==="USD"?"US$":"R$"} 100</h2>
     <div class="legenda" id="legenda">${j.estrategias.map(e=>`<button type="button" data-id="${e.id}" aria-pressed="${VIS.has(e.id)}"><i style="background:${COR[e.id]}"></i>${e.nome}</button>`).join("")}</div>
     <div class="grafico" id="graf">${g.svg}<div class="tip" id="tip" hidden></div></div>
-    <div class="nota-rodape">Toque numa estratégia para mostrar ou esconder. Escala logarítmica: a mesma distância vertical equivale à mesma variação percentual. Taxa de ${(j.parametros.taxa*100).toFixed(1)}% por operação.</div>
+    <div class="nota-rodape">${j.moeda==="BRL"?"Valores em reais (cripto convertida pelo dólar PTAX do dia). A linha tracejada é o CDI. ":""}Toque numa estratégia para mostrar ou esconder. Escala logarítmica: a mesma distância vertical equivale à mesma variação percentual. Taxa de ${(j.parametros.taxa*100).toFixed(1)}% por operação.</div>
   </section>
   <section class="card">
     <h2>Comparação</h2>
@@ -148,7 +151,7 @@ function render(j){
     const i = Math.max(0, Math.min(g.n-1, Math.round((px - g.m.l) / (g.W - g.m.l - g.m.r) * (g.n-1))));
     cross.setAttribute("x1", g.x(i)); cross.setAttribute("x2", g.x(i)); cross.setAttribute("visibility","visible");
     const linhas = j.estrategias.map(e=>({e, v:j.curvas[e.id][i]})).sort((a,b)=>b.v-a.v);
-    tip.innerHTML = `<b>${dataBR(j.curvas.datas[i])}</b>` + linhas.map(({e,v})=>`<div><i style="background:${COR[e.id]}"></i>${e.nome}: R$ ${v.toFixed(0)}</div>`).join("");
+    tip.innerHTML = `<b>${dataBR(j.curvas.datas[i])}</b>` + linhas.map(({e,v})=>`<div><i style="background:${COR[e.id]}"></i>${e.nome}: ${j.moeda==="USD"?"US$":"R$"} ${v.toFixed(0)}</div>`).join("");
     tip.hidden = false;
     const gx = g.x(i)/g.W*r.width, tw = tip.offsetWidth;
     tip.style.left = Math.max(0, Math.min(r.width - tw, gx > r.width/2 ? gx - tw - 12 : gx + 12)) + "px";
