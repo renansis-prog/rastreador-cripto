@@ -180,7 +180,8 @@ def nota_fundamental(f: dict):
 
 
 # ---------------------------------------------------------------- preços e técnica
-def baixar_precos(tickers, periodo="15mo"):
+def baixar_precos(tickers, periodo="15mo", ohlc=None):
+    """Fechamentos ajustados por ação. Se `ohlc` for um dict, guarda nele máxima/mínima/fechamento (para o ATR)."""
     import yfinance as yf
     simbolos = [t + ".SA" for t in tickers] + [INDICE]
     df = None
@@ -203,6 +204,46 @@ def baixar_precos(tickers, periodo="15mo"):
             continue
         if len(serie) >= 60:
             out[s.replace(".SA", "")] = serie
+            if ohlc is not None:
+                try:
+                    ohlc[s.replace(".SA", "")] = df[s][["High", "Low", "Close"]].dropna()
+                except KeyError:
+                    pass
+    return out
+
+
+# ---------------------------------------------------------------- níveis de saída
+MULT_ATR_STOP = 2.0      # stop loss a 2 ATRs abaixo da cotação
+RISCO_RETORNO = 2.0      # stop gain a 2× a distância do stop loss (4 ATRs acima)
+
+
+def atr(hlc, n=14):
+    """Average True Range de Wilder: a variação média diária da ação, em R$."""
+    if hlc is None or len(hlc) <= n:
+        return None
+    h, l, c = hlc["High"].tolist(), hlc["Low"].tolist(), hlc["Close"].tolist()
+    tr = [max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1])) for i in range(1, len(c))]
+    a = sum(tr[:n]) / n
+    for x in tr[n:]:
+        a = (a * (n - 1) + x) / n
+    return a
+
+
+def niveis(preco, atr14, f):
+    """Stop loss/gain por regra e preço justo de Graham."""
+    out = {}
+    if preco and atr14:
+        stop = preco - MULT_ATR_STOP * atr14
+        gain = preco + RISCO_RETORNO * MULT_ATR_STOP * atr14
+        out.update({"atr14": atr14, "atr_pct": atr14 / preco * 100,
+                    "stop_loss": stop, "stop_loss_pct": (stop / preco - 1) * 100,
+                    "stop_gain": gain, "stop_gain_pct": (gain / preco - 1) * 100})
+    pl, pvp = f.get("pl"), f.get("pvp")
+    if preco and pl and pvp and pl > 0 and pvp > 0:
+        # Graham: raiz(22,5 × LPA × VPA), com LPA = preço/PL e VPA = preço/PVP (cotação do Fundamentus)
+        cot = f.get("cotacao") or preco
+        justo = (22.5 * (cot / pl) * (cot / pvp)) ** 0.5
+        out.update({"graham": justo, "graham_pct": (justo / preco - 1) * 100})
     return out
 
 
@@ -286,7 +327,8 @@ def main():
     uni = universo(fund)
     print(f"Fundamentus: {len(fund)} ações · {len(uni)} no universo (liquidez ≥ R$ {LIQUIDEZ_MINIMA/1e6:.0f} mi/dia)")
 
-    precos = baixar_precos(uni["papel"].tolist())
+    hlc = {}
+    precos = baixar_precos(uni["papel"].tolist(), ohlc=hlc)
     if INDICE not in precos:
         raise SystemExit("Sem dados do Ibovespa no Yahoo.")
     ibov = precos[INDICE].tolist()
@@ -306,6 +348,7 @@ def main():
             "nota_fund": nf, "criterios_fund": crit_f,
             **({k: limpo(v) if not isinstance(v, dict) else v for k, v in tec.items()} if tec else {"nota_tec": 0, "sem_precos": True}),
             "sparkline": [round(float(x), 2) for x in serie.tolist()[-120:]] if serie is not None else [],
+            **{k: limpo(v) for k, v in niveis(tec["preco"] if tec else None, atr(hlc.get(row["papel"])), f).items()},
             "sinal": sinal(nf, nt),
             "nota_final": round((nf + nt) / 2),
         })
@@ -318,9 +361,10 @@ def main():
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     SAIDA.write_text(json.dumps({
         "atualizado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "pregao": precos[INDICE].index[-1].strftime("%Y-%m-%d"),
         "fonte": "Fundamentus (fundamentos) + Yahoo Finance (preços ajustados por proventos)",
         "parametros": {"liquidez_minima": LIQUIDEZ_MINIMA, "max_acoes": MAX_ACOES,
-                       "pesos_tec": PESOS_TEC,
+                       "pesos_tec": PESOS_TEC, "mult_atr_stop": MULT_ATR_STOP, "risco_retorno": RISCO_RETORNO,
                        "criterios_fund": [{"id": k, "pontos": p, "texto": t, "bancos": b} for k, p, t, b in CRITERIOS_FUND]},
         "mercado": {k: limpo(v) if not isinstance(v, str) else v for k, v in clima(ibov).items()},
         "acoes": acoes,

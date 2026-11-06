@@ -64,6 +64,13 @@ svg.spark{width:110px;height:36px}
 .linha{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px;font:400 .8rem var(--f-num);font-variant-numeric:tabular-nums}
 .linha em{font-style:normal;color:var(--muted);margin-right:4px}
 .pos{color:var(--alta)} .neg{color:var(--baixa)}
+.niveis{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.niv{border:1px solid var(--line);border-radius:8px;padding:5px 8px;min-width:0}
+.niv span{display:block;font-size:.64rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.niv b{font:600 .88rem var(--f-num);font-variant-numeric:tabular-nums}
+.niv small{font:400 .74rem var(--f-num);margin-left:4px}
+.niv.loss{border-color:var(--baixa)} .niv.gain{border-color:var(--alta)}
+@media (max-width:560px){.niveis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .crit{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px}
 .crit span{font-size:.68rem;padding:1px 7px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
 .crit span.ok{border-color:var(--alta);color:var(--alta)}
@@ -92,6 +99,7 @@ summary{cursor:pointer;font-weight:600}
       <option value="ret_1m">Retorno 1 mês</option>
       <option value="vs_ibov_1m">Força vs Ibovespa</option>
       <option value="dy">Dividend yield</option>
+      <option value="graham_pct">Desconto pelo Graham</option>
       <option value="liquidez">Liquidez</option>
     </select>
   </div>
@@ -103,6 +111,8 @@ summary{cursor:pointer;font-weight:600}
     <p>Bancos e seguradoras não têm EV/EBIT, ROIC, margem e dívida comparáveis; para eles a nota usa só os outros critérios. Empresa com prejuízo (P/L negativo) fica com no máximo 30.</p>
     <p><b>Técnica (0–100)</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
     <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> fundamentos 60+ e técnica 70+ · <span class="pill s-Observar">Observar</span> fundamentos 60+, técnica abaixo de 70 · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p><b>Stop loss e stop gain</b>: calculados pela volatilidade da própria ação (ATR de 14 pregões, a variação média diária). O stop loss fica 2 ATRs abaixo da cotação; o stop gain fica no dobro dessa distância acima (risco e retorno de 2 para 1). Uma ação mais agitada ganha um stop mais largo, para não ser vendida por oscilação normal. São níveis de partida: recalcule com o preço em que você realmente comprar.</p>
+    <p><b>Preço justo (Graham)</b>: raiz de 22,5 × lucro por ação × patrimônio por ação. É uma referência conservadora de valor; costuma subestimar empresas de crescimento (como WEG) e não se aplica a quem tem prejuízo. Não é um preço-alvo.</p>
     <p>Entram as ações com liquidez média de R$ 5 milhões por dia ou mais, uma por empresa. É uma triagem por regras fixas, não recomendação de investimento.</p>
   </details>
 </div>
@@ -141,8 +151,14 @@ function render(){
     return `<div class="acao">
       <div class="notas"><div class="nota" style="background:${corNota(a.nota_fund)}"><b>${a.nota_fund}</b><span>Fund.</span></div><div class="nota" style="background:${corNota(a.nota_tec)}"><b>${Math.round(a.nota_tec)}</b><span>Téc.</span></div></div>
       <div class="nome"><strong>${esc(a.papel)}</strong><span class="pill s-${a.sinal}">${a.sinal}</span>${a.financeira?'<span class="tag" style="background:var(--neu-bg);color:var(--neu)">financeira</span>':''}${rsi}
-        <div class="preco">R$ ${reais(a.preco ?? f.cotacao)} · liquidez R$ ${mi(f.liquidez)}/dia${a.historico_curto?" · histórico curto":""}</div></div>
+        <div class="preco">${a.stop_loss == null ? `R$ ${reais(a.preco ?? f.cotacao)} · ` : ""}liquidez R$ ${mi(f.liquidez)}/dia${a.historico_curto?" · histórico curto":""}</div></div>
       ${spark(a.sparkline)}
+      ${a.stop_loss != null ? `<div class="niveis">
+        <div class="niv"><span>Cotação</span><b>R$ ${reais(a.preco)}</b></div>
+        <div class="niv loss"><span>Stop loss</span><b>R$ ${reais(a.stop_loss)}</b><small class="neg">${num(a.stop_loss_pct)}%</small></div>
+        <div class="niv gain"><span>Stop gain</span><b>R$ ${reais(a.stop_gain)}</b><small class="pos">+${num(a.stop_gain_pct)}%</small></div>
+        <div class="niv"><span>Preço justo (Graham)</span>${a.graham != null ? `<b>R$ ${reais(a.graham)}</b><small class="${a.graham_pct>=0?'pos':'neg'}">${a.graham_pct>=0?'+':''}${num(a.graham_pct,0)}%</small>` : `<b>—</b>`}</div>
+      </div>` : ""}
       <div class="linha"><span><em>P/L</em>${num(f.pl)}</span><span><em>P/VP</em>${num(f.pvp,2)}</span><span><em>ROE</em>${num(f.roe)}%</span><span><em>DY</em>${num(f.dy)}%</span><span><em>Dív.líq/PL</em>${a.financeira?"—":num(f.div_pat,2)}</span><span><em>Receita 5a</em>${f.cresc_rec_5a==null?"—":num(f.cresc_rec_5a)+"%"}</span></div>
       <div class="linha"><span><em>1 sem</em>${pct(a.ret_1s)}</span><span><em>1 mês</em>${pct(a.ret_1m)}</span><span><em>3 meses</em>${pct(a.ret_3m)}</span><span><em>vs Ibov 1m</em>${pct(a.vs_ibov_1m)}</span><span><em>vs MM200</em>${pct(a.dist_mm200)}</span></div>
       <div class="crit">${critFund.map(c => { const v = a.criterios_fund[c.id]; return `<span class="${v===null?'na':v?'ok':''}" title="${esc(c.texto)}">${v===null?'–':v?'✓':'·'} ${esc(c.texto)}</span>`; }).join("")}</div>
@@ -159,7 +175,7 @@ function carregar(j){
   dados = j.acoes || [];
   critFund = j.parametros.criterios_fund;
   $("#lista-fund").innerHTML = critFund.map(c => `<li>${esc(c.texto)}: ${c.pontos} pontos${c.bancos?"":" (não vale para bancos)"}</li>`).join("");
-  $("#sub").textContent = `${dados.length} ações · Fundamentus + Yahoo Finance · atualizado em ${new Date(j.atualizado_em).toLocaleString("pt-BR")}`;
+  $("#sub").textContent = `${dados.length} ações · cotações do fechamento de ${j.pregao ? j.pregao.split("-").reverse().join("/") : "—"} · Fundamentus + Yahoo Finance · atualizado em ${new Date(j.atualizado_em).toLocaleString("pt-BR")}`;
   const c = j.mercado;
   if (c && c.estado && c.estado !== "indefinido"){
     const t = {alta:["Ibovespa em alta","acima da média de 200 pregões, com a MM50 acima da MM200. Sinais de compra tendem a funcionar melhor."],
