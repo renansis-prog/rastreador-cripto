@@ -30,6 +30,7 @@ jobs:
         run: python backtest.py
         env:
           COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+          PYTHONUNBUFFERED: "1"   # mostra o progresso no log em tempo real
       - name: Salvar resultado
         run: |
           git config user.name "github-actions[bot]"
