@@ -224,6 +224,11 @@ def atr(hlc, n=14):
         return None
     h, l, c = hlc["High"].tolist(), hlc["Low"].tolist(), hlc["Close"].tolist()
     tr = [max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1])) for i in range(1, len(c))]
+    # dias fora da curva (máxima/mínima errada no Yahoo, ou um pregão extremo isolado) não podem
+    # alargar o stop por semanas: cada dia entra limitado a 3× a mediana dos últimos 60
+    base = sorted(tr[-60:])[len(tr[-60:]) // 2] if tr else 0
+    if base > 0:
+        tr = [min(x, 3 * base) for x in tr]
     a = sum(tr[:n]) / n
     for x in tr[n:]:
         a = (a * (n - 1) + x) / n
