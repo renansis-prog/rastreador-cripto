@@ -6,7 +6,7 @@ on:
     - cron: "41 4 1 * *"      # dia 1 de cada mês, 01:41 (Brasília)
   push:
     branches: [main]
-    paths: ["backtest.py"]
+    paths: ["backtest.py", ".github/workflows/backtest.yml"]
 
 permissions:
   contents: write
@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Pegar a lista de moedas mais recente do painel
+        run: git pull --ff-only origin main || true
       - name: Rodar backtest
         run: python backtest.py
         env:
