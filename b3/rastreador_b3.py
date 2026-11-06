@@ -5,11 +5,12 @@ Rastreador B3 — fundamentos + análise técnica.
    por valuation, qualidade, saúde financeira, crescimento e dividendos.
 2. Análise técnica (Yahoo Finance, preços ajustados por proventos): nota de 0 a 100
    pela mesma lógica do rastreador de criptos, com o Ibovespa no lugar do BTC.
-3. Sinal, juntando as duas:
-     Compra   fundamentos >= 60 e técnica >= 70  (empresa boa, tendência a favor)
-     Observar fundamentos >= 60 e técnica <  70  (empresa boa, momento ainda não)
+3. Sinal, pela nota de fundamentos (a regra que melhor funcionou no teste com balanços da CVM):
+     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica)
+     Observar fundamentos 60+ fora das 10 maiores
      Neutra   fundamentos entre 40 e 59
-     Evitar   fundamentos <  40
+     Evitar   fundamentos abaixo de 40
+   A nota técnica fica como informação: nos testes, ela não previu retorno.
 
 Saída: docs/b3/data.json (lido por docs/b3/index.html).
 """
@@ -305,10 +306,24 @@ def analisar(closes, ibov_ret_mes=None):
     }
 
 
-def sinal(nf, nt):
+TOP_COMPRA = 10
+
+
+def sinal_antigo(nf, nt):
+    """Regra antiga (fundamentos 60+ e técnica 70+). Fica só para comparação no backtest."""
     if nf >= 60:
         return "Compra" if nt >= 70 else "Observar"
     return "Neutra" if nf >= 40 else "Evitar"
+
+
+def aplicar_sinais(notas):
+    """notas = {papel: (nota_fund, nota_tec)} -> {papel: sinal}."""
+    ordem = sorted(notas.items(), key=lambda kv: (kv[1][0], kv[1][1]), reverse=True)
+    top = [p for p, (nf, _) in ordem if nf >= 60][:TOP_COMPRA]
+    out = {}
+    for p, (nf, _) in notas.items():
+        out[p] = "Compra" if p in top else "Observar" if nf >= 60 else "Neutra" if nf >= 40 else "Evitar"
+    return out
 
 
 def clima(ibov):
@@ -349,15 +364,18 @@ def main():
             **({k: limpo(v) if not isinstance(v, dict) else v for k, v in tec.items()} if tec else {"nota_tec": 0, "sem_precos": True}),
             "sparkline": [round(float(x), 2) for x in serie.tolist()[-120:]] if serie is not None else [],
             **{k: limpo(v) for k, v in niveis(tec["preco"] if tec else None, atr(hlc.get(row["papel"])), f).items()},
-            "sinal": sinal(nf, nt),
+            "sinal": None,
             "nota_final": round((nf + nt) / 2),
         })
 
     if sum(1 for a in acoes if not a.get("sem_precos")) < len(acoes) // 2:
         raise SystemExit("Menos da metade das ações veio com preço — dados não salvos.")
 
+    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes})
+    for a in acoes:
+        a["sinal"] = sinais[a["papel"]]
     ordem = {s: i for i, s in enumerate(SINAIS)}
-    acoes.sort(key=lambda a: (ordem[a["sinal"]], -a["nota_final"]))
+    acoes.sort(key=lambda a: (ordem[a["sinal"]], -a["nota_fund"], -a["nota_tec"]))
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     SAIDA.write_text(json.dumps({
         "atualizado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),

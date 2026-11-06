@@ -93,7 +93,7 @@ summary{cursor:pointer;font-weight:600}
   <div class="filtros">
     <input id="busca" type="search" placeholder="Buscar ação (ex: PETR)" aria-label="Buscar ação">
     <select id="ordem" aria-label="Ordenar por">
-      <option value="nota_final">Ordenar: sinal e nota final</option>
+      <option value="nota_final">Ordenar: sinal e fundamentos</option>
       <option value="nota_fund">Nota de fundamentos</option>
       <option value="nota_tec">Nota técnica</option>
       <option value="ret_1m">Retorno 1 mês</option>
@@ -109,8 +109,9 @@ summary{cursor:pointer;font-weight:600}
     <p><b>Fundamentos (0–100)</b>, com dados do Fundamentus:</p>
     <ul id="lista-fund"></ul>
     <p>Bancos e seguradoras não têm EV/EBIT, ROIC, margem e dívida comparáveis; para eles a nota usa só os outros critérios. Empresa com prejuízo (P/L negativo) fica com no máximo 30.</p>
-    <p><b>Técnica (0–100)</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
-    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> fundamentos 60+ e técnica 70+ · <span class="pill s-Observar">Observar</span> fundamentos 60+, técnica abaixo de 70 · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p><b>Técnica (0–100), só informativa</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
+    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos, desde que 60+ (desempate pela técnica) · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p>Por que só fundamentos? No <a href="fundamentos.html">teste com 9 anos de balanços da CVM</a>, as 10 maiores notas de fundamentos renderam bem mais que o CDI e o Ibovespa, e exigir nota técnica alta reduziu o retorno. A nota técnica fica como informação do momento da ação.</p>
     <p><b>Stop loss e stop gain</b>: calculados pela volatilidade da própria ação (ATR de 14 pregões, a variação média diária). O stop loss fica 2 ATRs abaixo da cotação; o stop gain fica no dobro dessa distância acima (risco e retorno de 2 para 1). Uma ação mais agitada ganha um stop mais largo, para não ser vendida por oscilação normal. São níveis de partida: recalcule com o preço em que você realmente comprar.</p>
     <p><b>Preço justo (Graham)</b>: raiz de 22,5 × lucro por ação × patrimônio por ação. É uma referência conservadora de valor; costuma subestimar empresas de crescimento (como WEG) e não se aplica a quem tem prejuízo. Não é um preço-alvo.</p>
     <p>Entram as ações com liquidez média de R$ 5 milhões por dia ou mais, uma por empresa. É uma triagem por regras fixas, não recomendação de investimento.</p>
@@ -119,7 +120,7 @@ summary{cursor:pointer;font-weight:600}
 <script>
 const $ = s => document.querySelector(s);
 const SINAIS = ["Compra","Observar","Neutra","Evitar"];
-const DESC = {Compra:"bons fundamentos, tendência a favor", Observar:"bons fundamentos, esperar tendência", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
+const DESC = {Compra:"10 melhores fundamentos", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
 const CRIT_TEC = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_1m:"1m +",alta_3m:"3m +",forte_vs_ibov:"> Ibov 1m"};
 let dados = [], sel = null, critFund = [];
 
@@ -143,7 +144,7 @@ function valor(a, k){ return k === "dy" || k === "liquidez" ? a.fund[k] : a[k]; 
 function render(){
   const q = $("#busca").value.trim().toUpperCase(), ord = $("#ordem").value;
   let l = dados.filter(a => (!q || a.papel.includes(q)) && (!sel || a.sinal === sel));
-  if (ord === "nota_final") l.sort((a,b) => SINAIS.indexOf(a.sinal) - SINAIS.indexOf(b.sinal) || b.nota_final - a.nota_final);
+  if (ord === "nota_final") l.sort((a,b) => SINAIS.indexOf(a.sinal) - SINAIS.indexOf(b.sinal) || b.nota_fund - a.nota_fund || b.nota_tec - a.nota_tec);
   else l.sort((a,b) => (valor(b,ord) ?? -1e12) - (valor(a,ord) ?? -1e12));
   $("#lista").innerHTML = l.length ? l.map(a => {
     const f = a.fund;

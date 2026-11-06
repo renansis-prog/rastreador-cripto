@@ -59,11 +59,15 @@ Mesmo princípio, para ações da B3, juntando **fundamentos** (Fundamentus) e *
 - Backtest: `https://renansis-prog.github.io/rastreador-cripto/b3/backtest.html`
 - Atualiza nos dias úteis às 19:37 (Brasília); backtest no dia 2 de cada mês. Não precisa de chave.
 
-**Sinal:** Compra (fundamentos 60+ e técnica 70+) · Observar (fundamentos 60+, técnica < 70) ·
-Neutra (fundamentos 40–59) · Evitar (fundamentos < 40).
+**Sinal:** Compra (as 10 maiores notas de fundamentos, desde que 60+) · Observar (fundamentos 60+ fora do top 10) ·
+Neutra (fundamentos 40–59) · Evitar (fundamentos < 40). A nota técnica é só informativa: nos testes ela não previu retorno.
+Cada ação mostra stop loss (2 ATR abaixo) e stop gain (4 ATR acima) e o preço justo de Graham.
+
+**Teste dos fundamentos** (`b3/fundamentos_cvm.py` + `b3/backtest_fund.py`): balanços históricos da CVM desde 2016,
+nota recalculada mês a mês só com o que já estava publicado. Resultados em `b3/fundamentos.html`.
 
 **Fundamentos (0–100):** P/L 0–15 (15) · P/VP ≤ 2 (10) · EV/EBIT 0–10 (15) · ROE ≥ 15% (15) · ROIC ≥ 10% (10) ·
 margem líquida ≥ 10% (10) · dívida líquida ≤ 1× patrimônio (10) · receita +5% a.a. em 5 anos (10) · DY ≥ 4% (5).
 Bancos e seguradoras: só os critérios que se aplicam. Prejuízo limita a nota a 30.
 
-O backtest mede só a parte técnica (com caixa rendendo CDI), porque o Fundamentus não tem histórico dos indicadores.
+O backtest de `b3/backtest.html` mede só a parte técnica (com caixa rendendo CDI).

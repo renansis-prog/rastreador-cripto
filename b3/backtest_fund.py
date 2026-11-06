@@ -10,7 +10,8 @@ Em cada fim de mês do teste, para cada ação:
 
 Estratégias (definidas antes de ver os resultados):
   cdi, ibov                  réguas
-  fund_top10                 10 maiores notas de fundamentos, troca mensal
+  fund_top10                 10 maiores notas de fundamentos, troca mensal (= sinal de Compra atual)
+  fund_top10_stops           igual, com stop loss (2 ATR) e stop gain (4 ATR) checados todo dia
   sinal_compra               ações em Compra (até 10, 10% cada), resto no CDI
   sinal_compra_stops         igual, mas sai no stop loss (2 ATR) ou stop gain (4 ATR), checado todo dia
   fund_tendencia             fundamentos 60+ (10 maiores), só com o Ibovespa acima da MM200; senão CDI
@@ -244,11 +245,13 @@ def escolher(modo, e, ibov_ok):
         return {"IBOV": 1.0}
     if modo == "todas":
         return {m: 1 / len(e) for m in e} if e else {}
-    if modo == "fund_top10":
-        top = sorted(e.items(), key=lambda kv: (kv[1]["nf"], kv[1]["nt"]), reverse=True)[:TOP_N]
-        return {m: 1 / len(top) for m, _ in top} if top else {}
+    if modo in ("fund_top10", "fund_top10_stops"):
+        # mesma regra do sinal de Compra do painel: 10 maiores notas, só com nota 60+; vagas vazias no CDI
+        top = sorted(((m, x) for m, x in e.items() if x["nf"] >= 60),
+                     key=lambda kv: (kv[1]["nf"], kv[1]["nt"]), reverse=True)[:TOP_N]
+        return {m: 1 / TOP_N for m, _ in top}
     if modo in ("sinal_compra", "sinal_compra_stops"):
-        c = [(m, x) for m, x in e.items() if x["sinal"] == "Compra"]
+        c = [(m, x) for m, x in e.items() if x["sinal"] == "Compra"]   # regra antiga
         c.sort(key=lambda kv: kv[1]["nf"] + kv[1]["nt"], reverse=True)
         return {m: 1 / TOP_N for m, _ in c[:TOP_N]}
     if modo == "fund_tendencia":
@@ -331,7 +334,7 @@ def main():
                                 "Low": P[papel]["low"][max(0, i - 60): i + 1],
                                 "Close": P[papel]["close"][max(0, i - 60): i + 1]}).dropna()
             nt = tec["nota_tec"]
-            ent[i][papel] = {"nf": nf, "nt": nt, "sinal": T.sinal(nf, nt), "atr": T.atr(hlc)}
+            ent[i][papel] = {"nf": nf, "nt": nt, "sinal": T.sinal_antigo(nf, nt), "atr": T.atr(hlc)}
             if i == ultimo_reb:
                 conf.append({"papel": papel, "pl_calc": f["pl"], "pl_fundamentus": info[papel]["fund"].get("pl"),
                              "roe_calc": f["roe"], "roe_fundamentus": info[papel]["fund"].get("roe"),
@@ -343,9 +346,10 @@ def main():
         ("cdi", "CDI", "Renda fixa: 100% do CDI.", False),
         ("ibov", "Ibovespa (segurar)", "Compra o índice e não mexe.", False),
         ("todas", "Todas as ações (média)", "Pesos iguais em todas as ações do universo, todo mês. Mostra o efeito de usar só as ações que existem hoje.", False),
-        ("fund_top10", "Top 10 fundamentos", "As 10 maiores notas de fundamentos, trocadas todo mês.", False),
-        ("sinal_compra", "Sinal de Compra", "Ações em Compra (fundamentos 60+ e técnica 70+), até 10 com 10% cada; vagas vazias no CDI. Revisto todo mês.", False),
-        ("sinal_compra_stops", "Sinal de Compra + stops", "Igual ao anterior, mas vende no stop loss (2 ATR abaixo da entrada) ou no stop gain (4 ATR acima), checado todo dia.", True),
+        ("fund_top10", "Top 10 fundamentos (Compra atual)", "A regra atual do sinal de Compra: as 10 maiores notas de fundamentos (60+), 10% cada, revistas todo mês; vagas vazias no CDI.", False),
+        ("fund_top10_stops", "Top 10 fundamentos + stops", "A regra atual do painel com os stops: vende no stop loss (2 ATR abaixo da entrada) ou no stop gain (4 ATR acima), checado todo dia; o dinheiro espera no CDI até a próxima troca.", True),
+        ("sinal_compra", "Regra antiga (fund. 60+ e téc. 70+)", "Regra anterior do painel: fundamentos 60+ e técnica 70+, até 10 com 10% cada; vagas vazias no CDI.", False),
+        ("sinal_compra_stops", "Regra antiga + stops", "Regra anterior com stop loss e stop gain.", True),
         ("fund_tendencia", "Fundamentos + Ibovespa em tendência", "Até 10 ações com fundamentos 60+, só quando o Ibovespa está acima da MM200; senão, CDI.", False),
     ]
     tabela, curvas, stats = [], {}, None
@@ -354,7 +358,7 @@ def main():
         curvas[k] = c
         tabela.append({"id": k, "nome": nome, "regra": regra, **metricas(c)})
         print(f"  {nome}: {tabela[-1]['retorno_anual']:.1f}% a.a. · queda máx {tabela[-1]['queda_maxima']:.1f}%")
-        if st and trades:
+        if k == "fund_top10_stops" and trades:
             def resumo(lst):
                 return {"n": len(lst), "ret_medio": statistics.mean(t["ret"] for t in lst)} if lst else {"n": 0, "ret_medio": None}
             stats = {m: resumo([t for t in trades if t["motivo"] == m]) for m in ("gain", "loss", "troca")}
