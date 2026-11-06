@@ -70,9 +70,9 @@ td:first-child{font-family:var(--f-body);font-weight:600}
 </div>
 <script>
 const $ = s => document.querySelector(s);
-const COR = {cdi:"var(--fg)", ibov:"var(--s1)", fund_top10:"var(--s3)", sinal_compra:"var(--s2)", sinal_compra_stops:"var(--s7)", fund_tendencia:"var(--s5)"};
-const VIS = new Set(["cdi","ibov","fund_top10","sinal_compra","sinal_compra_stops","fund_tendencia"]);
-const BASE = new Set(["cdi","ibov"]);
+const COR = {cdi:"var(--fg)", ibov:"var(--s1)", todas:"var(--s8)", fund_top10:"var(--s3)", sinal_compra:"var(--s2)", sinal_compra_stops:"var(--s7)", fund_tendencia:"var(--s5)"};
+const VIS = new Set(["cdi","ibov","todas","fund_top10","sinal_compra","sinal_compra_stops","fund_tendencia"]);
+const BASE = new Set(["cdi","ibov","todas"]);
 const pct = (v,d=1) => v==null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(d)}%</span>`;
 const pctTxt = v => v==null ? "—" : `${v>=0?'+':''}${v.toFixed(1)}%`;
 const dataBR = s => s.split("-").reverse().join("/");
@@ -119,6 +119,7 @@ function render(j){
   <section class="card veredito">
     <h2>Resultado</h2>
     <p><b>Contra o CDI</b> (${pctTxt(cdi.retorno_anual)} ao ano): ${acimaCdi.length ? `${acimaCdi.length} de ${cand.length} estratégias renderam mais. A melhor, <b>${melhor.nome}</b>, fez ${pctTxt(melhor.retorno_anual)} ao ano, com queda máxima de ${pctTxt(melhor.queda_maxima)}.` : `nenhuma estratégia rendeu mais que o CDI. A melhor, <b>${melhor.nome}</b>, fez ${pctTxt(melhor.retorno_anual)} ao ano.`}</p>
+    ${E.todas ? `<p><b>Contra a média das mesmas ações</b> (${pctTxt(E.todas.retorno_anual)} ao ano): é a régua mais justa, porque todas as estratégias usam as ações que existem hoje. ${cand.filter(e=>e.retorno_anual>E.todas.retorno_anual).length} de ${cand.length} estratégias superaram essa média.</p>` : ""}
     <p><b>O sinal de Compra</b> do painel rendeu ${pctTxt(sc.retorno_anual)} ao ano (queda máxima ${pctTxt(sc.queda_maxima)}); com os stops, ${pctTxt(scs.retorno_anual)} ao ano (queda máxima ${pctTxt(scs.queda_maxima)}). Em média havia ${j.media_compra_por_mes.toFixed(1).replace(".",",")} ações em Compra por mês; o resto do dinheiro ficava no CDI. Ibovespa: ${pctTxt(ibov.retorno_anual)} ao ano.</p>
     ${alto && baixo ? `<p>Poder de previsão dos fundamentos: no mês seguinte, ações com nota 80+ renderam em média ${pctTxt(alto.media)} (mediana ${pctTxt(alto.mediana)}), e as abaixo de 40, ${pctTxt(baixo.media)} (mediana ${pctTxt(baixo.mediana)}). ${alto.mediana > baixo.mediana ? "A nota separou as ações na direção certa." : "A nota <b>não</b> separou as ações na direção certa."}</p>` : ""}
   </section>

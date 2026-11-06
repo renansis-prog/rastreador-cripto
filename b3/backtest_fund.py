@@ -242,6 +242,8 @@ def escolher(modo, e, ibov_ok):
         return {}
     if modo == "ibov":
         return {"IBOV": 1.0}
+    if modo == "todas":
+        return {m: 1 / len(e) for m in e} if e else {}
     if modo == "fund_top10":
         top = sorted(e.items(), key=lambda kv: (kv[1]["nf"], kv[1]["nt"]), reverse=True)[:TOP_N]
         return {m: 1 / len(top) for m, _ in top} if top else {}
@@ -340,6 +342,7 @@ def main():
     estrategias = [
         ("cdi", "CDI", "Renda fixa: 100% do CDI.", False),
         ("ibov", "Ibovespa (segurar)", "Compra o índice e não mexe.", False),
+        ("todas", "Todas as ações (média)", "Pesos iguais em todas as ações do universo, todo mês. Mostra o efeito de usar só as ações que existem hoje.", False),
         ("fund_top10", "Top 10 fundamentos", "As 10 maiores notas de fundamentos, trocadas todo mês.", False),
         ("sinal_compra", "Sinal de Compra", "Ações em Compra (fundamentos 60+ e técnica 70+), até 10 com 10% cada; vagas vazias no CDI. Revisto todo mês.", False),
         ("sinal_compra_stops", "Sinal de Compra + stops", "Igual ao anterior, mas vende no stop loss (2 ATR abaixo da entrada) ou no stop gain (4 ATR acima), checado todo dia.", True),
