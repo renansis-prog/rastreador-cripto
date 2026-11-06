@@ -1,0 +1,46 @@
+name: B3 - teste dos fundamentos
+
+on:
+  schedule:
+    - cron: "17 6 3 * *"      # dia 3 de cada mês, 03:17 (Brasília)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["b3/fundamentos_cvm.py", "b3/backtest_fund.py", ".github/workflows/b3-fundamentos.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: b3-fundamentos
+  cancel-in-progress: false
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r b3/requirements.txt
+      - name: Pegar a lista de ações mais recente do painel
+        run: git pull --ff-only origin main || true
+      - name: Baixar balanços da CVM
+        run: python b3/fundamentos_cvm.py
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Rodar o teste
+        run: python b3/backtest_fund.py
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Salvar resultado
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add b3/dados/fundamentos_trimestrais.csv docs/b3/backtest_fund.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "B3: atualiza teste dos fundamentos $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push
