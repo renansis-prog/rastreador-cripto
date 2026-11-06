@@ -70,8 +70,8 @@ td:first-child{font-family:var(--f-body);font-weight:600}
 </div>
 <script>
 const $ = s => document.querySelector(s);
-const COR = {cdi:"var(--fg)", ibov:"var(--s1)", todas:"var(--s8)", filtro:"var(--s3)", filtro_stops:"var(--s6)", fund_top10:"var(--s4)", fund_top10_stops:"var(--s5)", sinal_compra:"var(--s2)", sinal_compra_stops:"var(--s7)", fund_tendencia:"var(--s5)"};
-const VIS = new Set(["cdi","ibov","todas","filtro","filtro_stops","fund_top10","sinal_compra","sinal_compra_stops","fund_tendencia"]);
+const COR = {cdi:"var(--fg)", ibov:"var(--s1)", todas:"var(--s8)", fund_top10:"var(--s3)", fund_top10_stops:"var(--s6)", risco_stops:"var(--s7)", filtro:"var(--s4)", sinal_compra:"var(--s2)", fund_tendencia:"var(--s5)"};
+const VIS = new Set(["cdi","ibov","todas","fund_top10","fund_top10_stops","risco_stops"]);
 const BASE = new Set(["cdi","ibov","todas"]);
 const pct = (v,d=1) => v==null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(d)}%</span>`;
 const pctTxt = v => v==null ? "—" : `${v>=0?'+':''}${v.toFixed(1)}%`;
@@ -110,7 +110,7 @@ function render(j){
   const alto = F["80+"], baixo = F["abaixo de 40"];
   const anos = (j.periodo.pregoes/252).toFixed(1).replace(".",",");
   const st = j.stops;
-  const sc = E.filtro, scs = E.filtro_stops, semf = E.fund_top10, antigo = E.sinal_compra;
+  const sc = E.fund_top10, scs = E.fund_top10_stops, rs = E.risco_stops, filt = E.filtro, antigo = E.sinal_compra;
   const conf = (j.conferencia||[]).filter(c=>c.pl_calc!=null && c.pl_fundamentus);
   const difPL = conf.length ? conf.map(c=>Math.abs(c.pl_calc/c.pl_fundamentus-1)*100).sort((a,b)=>a-b)[Math.floor(conf.length/2)] : null;
 
@@ -120,7 +120,7 @@ function render(j){
     <h2>Resultado</h2>
     <p><b>Contra o CDI</b> (${pctTxt(cdi.retorno_anual)} ao ano): ${acimaCdi.length ? `${acimaCdi.length} de ${cand.length} estratégias renderam mais. A melhor, <b>${melhor.nome}</b>, fez ${pctTxt(melhor.retorno_anual)} ao ano, com queda máxima de ${pctTxt(melhor.queda_maxima)}.` : `nenhuma estratégia rendeu mais que o CDI. A melhor, <b>${melhor.nome}</b>, fez ${pctTxt(melhor.retorno_anual)} ao ano.`}</p>
     ${E.todas ? `<p><b>Contra a média das mesmas ações</b> (${pctTxt(E.todas.retorno_anual)} ao ano): é a régua mais justa, porque todas as estratégias usam as ações que existem hoje. ${cand.filter(e=>e.retorno_anual>E.todas.retorno_anual).length} de ${cand.length} estratégias superaram essa média.</p>` : ""}
-    <p><b>O sinal de Compra atual</b> (10 maiores notas de fundamentos, sem alertas de risco) rendeu ${pctTxt(sc.retorno_anual)} ao ano, com queda máxima de ${pctTxt(sc.queda_maxima)}; com os stops, ${pctTxt(scs.retorno_anual)} ao ano e queda máxima de ${pctTxt(scs.queda_maxima)}. Sem os filtros de risco, as 10 maiores notas renderam ${pctTxt(semf.retorno_anual)} ao ano (queda máxima ${pctTxt(semf.queda_maxima)}). A regra antiga, que exigia técnica 70+, rendeu ${pctTxt(antigo.retorno_anual)} ao ano. Ibovespa: ${pctTxt(ibov.retorno_anual)} ao ano.</p>
+    <p><b>O sinal de Compra atual</b> (10 maiores notas de fundamentos) rendeu ${pctTxt(sc.retorno_anual)} ao ano, com queda máxima de ${pctTxt(sc.queda_maxima)}; com os stops, ${pctTxt(scs.retorno_anual)} ao ano e queda máxima de ${pctTxt(scs.queda_maxima)}. ${rs ? `Com o tamanho de posição sugerido no painel (1% da carteira em risco por ação), ${pctTxt(rs.retorno_anual)} ao ano e queda máxima de ${pctTxt(rs.queda_maxima)}.` : ""} Excluir as ações com aviso de risco rendeu ${pctTxt(filt.retorno_anual)} ao ano, por isso os avisos não tiram a ação da Compra. A regra antiga, que exigia técnica 70+, rendeu ${pctTxt(antigo.retorno_anual)} ao ano. Ibovespa: ${pctTxt(ibov.retorno_anual)} ao ano.</p>
     ${alto && baixo ? `<p>Poder de previsão dos fundamentos: no mês seguinte, ações com nota 80+ renderam em média ${pctTxt(alto.media)} (mediana ${pctTxt(alto.mediana)}), e as abaixo de 40, ${pctTxt(baixo.media)} (mediana ${pctTxt(baixo.mediana)}). ${alto.mediana > baixo.mediana ? "A nota separou as ações na direção certa." : "A nota <b>não</b> separou as ações na direção certa."}</p>` : ""}
   </section>
   <div class="aviso">Como foi feito: em cada mês, a nota de fundamentos usa só balanços já publicados (90 dias após o fim do trimestre), com o preço daquele dia. O teste usa as ações que estão na bolsa hoje (as que quebraram ficam de fora, o que melhora o resultado) e cobre ${anos} anos. ${difPL!=null?`Conferência: o P/L que o teste calcula para hoje difere em ${difPL.toFixed(0)}% (mediana) do P/L do Fundamentus.`:""} Rendimento passado não garante rendimento futuro.</div>

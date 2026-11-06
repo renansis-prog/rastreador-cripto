@@ -252,6 +252,16 @@ def escolher(modo, e, ibov_ok):
         top = sorted(((m, x) for m, x in e.items() if x["nf"] >= 60 and not x["alerta"]),
                      key=lambda kv: (kv[1]["nf"], kv[1]["nt"]), reverse=True)[:TOP_N]
         return {m: 1 / TOP_N for m, _ in top}
+    if modo == "risco_stops":
+        # regra do painel com o tamanho sugerido: 1% da carteira em risco até o stop (2 ATR), máx. 15%
+        top = sorted(((m, x) for m, x in e.items() if x["nf"] >= 60),
+                     key=lambda kv: (kv[1]["nf"], kv[1]["nt"]), reverse=True)[:TOP_N]
+        pesos = {}
+        for m, x in top:
+            dist = 2 * (x["atr_pct"] or 0)
+            pesos[m] = min(T.RISCO_POR_ACAO / dist, T.POSICAO_MAX / 100) if dist > 0 else 1 / TOP_N
+        soma = sum(pesos.values())
+        return {m: w / soma for m, w in pesos.items()} if soma > 1 else pesos
     if modo in ("fund_top10", "fund_top10_stops"):
         # mesma regra do sinal de Compra do painel: 10 maiores notas, só com nota 60+; vagas vazias no CDI
         top = sorted(((m, x) for m, x in e.items() if x["nf"] >= 60),
@@ -343,7 +353,8 @@ def main():
             nt = tec["nota_tec"]
             atr_i = T.atr(hlc)
             al = T.alertas(f, atr_i / c * 100 if atr_i else None, fin)
-            ent[i][papel] = {"nf": nf, "nt": nt, "sinal": T.sinal_antigo(nf, nt), "atr": atr_i, "alerta": bool(al)}
+            ent[i][papel] = {"nf": nf, "nt": nt, "sinal": T.sinal_antigo(nf, nt), "atr": atr_i, "alerta": bool(al),
+                             "atr_pct": atr_i / c * 100 if atr_i else None}
             if i == ultimo_reb:
                 conf.append({"papel": papel, "pl_calc": f["pl"], "pl_fundamentus": info[papel]["fund"].get("pl"),
                              "roe_calc": f["roe"], "roe_fundamentus": info[papel]["fund"].get("roe"),
@@ -355,12 +366,11 @@ def main():
         ("cdi", "CDI", "Renda fixa: 100% do CDI.", False),
         ("ibov", "Ibovespa (segurar)", "Compra o índice e não mexe.", False),
         ("todas", "Todas as ações (média)", "Pesos iguais em todas as ações do universo, todo mês. Mostra o efeito de usar só as ações que existem hoje.", False),
-        ("filtro", "Compra atual (top 10 com filtros)", "A regra atual do painel: as 10 maiores notas de fundamentos (60+) sem alerta de risco (volatilidade acima de 6% ao dia ou lucro atípico), 10% cada, revistas todo mês; vagas vazias no CDI.", False),
-        ("filtro_stops", "Compra atual + stops", "A regra atual com stop loss (2 ATR abaixo da entrada) e stop gain (4 ATR acima), checados todo dia; o dinheiro espera no CDI até a próxima troca.", True),
-        ("fund_top10", "Top 10 fundamentos sem filtros", "As 10 maiores notas de fundamentos (60+), sem os filtros de risco.", False),
-        ("fund_top10_stops", "Top 10 sem filtros + stops", "Igual, com stop loss e stop gain.", True),
+        ("fund_top10", "Compra atual (top 10 fundamentos)", "O sinal de Compra do painel: as 10 maiores notas de fundamentos (60+), 10% cada, revistas todo mês; vagas vazias no CDI.", False),
+        ("fund_top10_stops", "Compra atual + stops", "Igual, com stop loss (2 ATR abaixo da entrada) e stop gain (4 ATR acima), checados todo dia; o dinheiro espera no CDI até a próxima troca.", True),
+        ("risco_stops", "Compra atual + stops + tamanho por risco", "Igual, mas cada ação recebe a fatia sugerida no painel: 1% da carteira em risco até o stop, no máximo 15%; o resto fica no CDI.", True),
+        ("filtro", "Com filtros de risco (descartado)", "Top 10 sem as ações com alerta (volatilidade acima de 6% ao dia ou lucro atípico). Testado e descartado: rendeu menos sem reduzir a queda máxima.", False),
         ("sinal_compra", "Regra antiga (fund. 60+ e téc. 70+)", "Regra anterior do painel: fundamentos 60+ e técnica 70+, até 10 com 10% cada; vagas vazias no CDI.", False),
-        ("sinal_compra_stops", "Regra antiga + stops", "Regra anterior com stop loss e stop gain.", True),
         ("fund_tendencia", "Fundamentos + Ibovespa em tendência", "Até 10 ações com fundamentos 60+, só quando o Ibovespa está acima da MM200; senão, CDI.", False),
     ]
     tabela, curvas, stats = [], {}, None
@@ -369,7 +379,7 @@ def main():
         curvas[k] = c
         tabela.append({"id": k, "nome": nome, "regra": regra, **metricas(c)})
         print(f"  {nome}: {tabela[-1]['retorno_anual']:.1f}% a.a. · queda máx {tabela[-1]['queda_maxima']:.1f}%")
-        if k == "filtro_stops" and trades:
+        if k == "fund_top10_stops" and trades:
             def resumo(lst):
                 return {"n": len(lst), "ret_medio": statistics.mean(t["ret"] for t in lst)} if lst else {"n": 0, "ret_medio": None}
             stats = {m: resumo([t for t in trades if t["motivo"] == m]) for m in ("gain", "loss", "troca")}

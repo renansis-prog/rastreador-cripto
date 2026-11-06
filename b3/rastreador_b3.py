@@ -6,8 +6,10 @@ Rastreador B3 — fundamentos + análise técnica.
 2. Análise técnica (Yahoo Finance, preços ajustados por proventos): nota de 0 a 100
    pela mesma lógica do rastreador de criptos, com o Ibovespa no lugar do BTC.
 3. Sinal, pela nota de fundamentos (a regra que melhor funcionou no teste com balanços da CVM):
-     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica),
-              sem alerta de risco (volatilidade acima de 6% ao dia ou lucro atípico)
+     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica)
+   Alertas de risco (volatilidade alta, lucro atípico) aparecem como aviso, sem tirar da Compra:
+   no teste, filtrá-los derrubou o retorno sem reduzir a queda máxima. O risco é controlado pelo
+   tamanho da posição (1% da carteira em risco até o stop) e pelos stops.
      Observar fundamentos 60+ fora das 10 maiores
      Neutra   fundamentos entre 40 e 59
      Evitar   fundamentos abaixo de 40
@@ -217,6 +219,8 @@ def baixar_precos(tickers, periodo="15mo", ohlc=None):
 # ---------------------------------------------------------------- níveis de saída
 MULT_ATR_STOP = 2.0      # stop loss a 2 ATRs abaixo da cotação
 RISCO_RETORNO = 2.0      # stop gain a 2× a distância do stop loss (4 ATRs acima)
+RISCO_POR_ACAO = 1.0     # % da carteira que se aceita perder se o stop loss for atingido
+POSICAO_MAX = 15.0       # % máximo da carteira numa única ação
 
 
 def atr(hlc, n=14):
@@ -242,9 +246,12 @@ def niveis(preco, atr14, f):
     if preco and atr14:
         stop = preco - MULT_ATR_STOP * atr14
         gain = preco + RISCO_RETORNO * MULT_ATR_STOP * atr14
+        dist = (1 - stop / preco) * 100
         out.update({"atr14": atr14, "atr_pct": atr14 / preco * 100,
-                    "stop_loss": stop, "stop_loss_pct": (stop / preco - 1) * 100,
-                    "stop_gain": gain, "stop_gain_pct": (gain / preco - 1) * 100})
+                    "stop_loss": stop, "stop_loss_pct": -dist,
+                    "stop_gain": gain, "stop_gain_pct": (gain / preco - 1) * 100,
+                    # fatia da carteira para perder RISCO_POR_ACAO% se o stop for atingido
+                    "posicao_pct": min(RISCO_POR_ACAO / dist * 100, POSICAO_MAX) if dist > 0 else None})
     pl, pvp = f.get("pl"), f.get("pvp")
     if preco and pl and pvp and pl > 0 and pvp > 0:
         # Graham: raiz(22,5 × LPA × VPA), com LPA = preço/PL e VPA = preço/PVP (cotação do Fundamentus)
@@ -322,7 +329,7 @@ def sinal_antigo(nf, nt):
     return "Neutra" if nf >= 40 else "Evitar"
 
 
-# Filtros de risco: ação com alerta não entra em Compra (vai para Observar, com o motivo)
+# Alertas de risco (só aviso; não tiram da Compra)
 ATR_MAX_PCT = 6.0       # oscilação média diária acima disso = stop a mais de 12%
 PL_MIN = 3.0            # P/L abaixo disso costuma ser lucro que não se repete
 
@@ -398,8 +405,7 @@ def main():
 
     for a in acoes:
         a["alertas"] = alertas(a["fund"], a.get("atr_pct"), a["financeira"])
-    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes},
-                            bloqueadas={a["papel"] for a in acoes if a["alertas"]})
+    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes})
     for a in acoes:
         a["sinal"] = sinais[a["papel"]]
     ordem = {s: i for i, s in enumerate(SINAIS)}
@@ -412,6 +418,7 @@ def main():
         "parametros": {"liquidez_minima": LIQUIDEZ_MINIMA, "max_acoes": MAX_ACOES,
                        "pesos_tec": PESOS_TEC, "mult_atr_stop": MULT_ATR_STOP, "risco_retorno": RISCO_RETORNO,
                        "atr_max_pct": ATR_MAX_PCT, "pl_min": PL_MIN,
+                       "risco_por_acao": RISCO_POR_ACAO, "posicao_max": POSICAO_MAX,
                        "criterios_fund": [{"id": k, "pontos": p, "texto": t, "bancos": b} for k, p, t, b in CRITERIOS_FUND]},
         "mercado": {k: limpo(v) if not isinstance(v, str) else v for k, v in clima(ibov).items()},
         "acoes": acoes,

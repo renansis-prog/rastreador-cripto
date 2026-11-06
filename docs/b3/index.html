@@ -65,13 +65,13 @@ svg.spark{width:110px;height:36px}
 .linha{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px;font:400 .8rem var(--f-num);font-variant-numeric:tabular-nums}
 .linha em{font-style:normal;color:var(--muted);margin-right:4px}
 .pos{color:var(--alta)} .neg{color:var(--baixa)}
-.niveis{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.niveis{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .niv{border:1px solid var(--line);border-radius:8px;padding:5px 8px;min-width:0}
 .niv span{display:block;font-size:.64rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 .niv b{font:600 .88rem var(--f-num);font-variant-numeric:tabular-nums}
 .niv small{font:400 .74rem var(--f-num);margin-left:4px}
-.niv.loss{border-color:var(--baixa)} .niv.gain{border-color:var(--alta)}
-@media (max-width:560px){.niveis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.niv.loss{border-color:var(--baixa)} .niv.gain{border-color:var(--alta)} .niv.tam{border-color:var(--accent)}
+@media (max-width:560px){.niveis{grid-template-columns:repeat(2,minmax(0,1fr))} .niv:first-child{grid-column:1/-1}}
 .crit{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px}
 .crit span{font-size:.68rem;padding:1px 7px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
 .crit span.ok{border-color:var(--alta);color:var(--alta)}
@@ -111,8 +111,9 @@ summary{cursor:pointer;font-weight:600}
     <ul id="lista-fund"></ul>
     <p>Bancos e seguradoras não têm EV/EBIT, ROIC, margem e dívida comparáveis; para eles a nota usa só os outros critérios. Empresa com prejuízo (P/L negativo) fica com no máximo 30.</p>
     <p><b>Técnica (0–100), só informativa</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
-    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos, desde que 60+ e sem alerta de risco (desempate pela técnica) · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
-    <p><b>Filtros de risco</b>: não entram em Compra (ficam em Observar, com o aviso) as ações <span class="tag alerta">⚠ volátil</span>, que oscilam mais de 6% por dia em média, e as com <span class="tag alerta">⚠ lucro atípico</span>: P/L abaixo de 3, ou margem líquida maior que a margem operacional (o lucro veio de fora da operação, como venda de ativo ou crédito fiscal). A vaga passa para a próxima da fila.</p>
+    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos, desde que 60+ (desempate pela técnica) · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p><b>Avisos de risco</b>: <span class="tag alerta">⚠ volátil</span> marca ações que oscilam mais de 6% por dia em média; <span class="tag alerta">⚠ lucro atípico</span> marca P/L abaixo de 3 ou margem líquida maior que a operacional (o lucro pode ter vindo de fora da operação, como venda de ativo ou crédito fiscal; vale conferir o balanço). Os avisos não tiram a ação da Compra: no teste, excluir essas ações derrubou o retorno de cerca de 18% para 11% ao ano sem reduzir a queda máxima.</p>
+    <p><b>Tamanho sugerido</b>: a fatia da carteira para perder no máximo 1% do total se o stop loss for atingido (1% ÷ distância até o stop), limitada a 15%. Ações agitadas, com stop mais distante, entram com uma fatia menor; o que sobra pode ficar no CDI. Se você aceita arriscar 2% por ação, dobre os valores (respeitando o limite).</p>
     <p>Por que só fundamentos? No <a href="fundamentos.html">teste com 9 anos de balanços da CVM</a>, as 10 maiores notas de fundamentos renderam bem mais que o CDI e o Ibovespa, e exigir nota técnica alta reduziu o retorno. A nota técnica fica como informação do momento da ação.</p>
     <p><b>Stop loss e stop gain</b>: calculados pela volatilidade da própria ação (ATR de 14 pregões, a variação média diária). O stop loss fica 2 ATRs abaixo da cotação; o stop gain fica no dobro dessa distância acima (risco e retorno de 2 para 1). Uma ação mais agitada ganha um stop mais largo, para não ser vendida por oscilação normal. São níveis de partida: recalcule com o preço em que você realmente comprar.</p>
     <p><b>Preço justo (Graham)</b>: raiz de 22,5 × lucro por ação × patrimônio por ação. É uma referência conservadora de valor; costuma subestimar empresas de crescimento (como WEG) e não se aplica a quem tem prejuízo. Não é um preço-alvo.</p>
@@ -122,8 +123,8 @@ summary{cursor:pointer;font-weight:600}
 <script>
 const $ = s => document.querySelector(s);
 const SINAIS = ["Compra","Observar","Neutra","Evitar"];
-const ALERTA = {volatil:["volátil","Oscila mais de 6% por dia em média: o stop ficaria largo demais. Fora da Compra."], lucro_atipico:["lucro atípico","P/L abaixo de 3 ou lucro maior que o resultado da operação: pode ser lucro que não se repete. Fora da Compra."]};
-const DESC = {Compra:"10 melhores fundamentos, sem alertas", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
+const ALERTA = {volatil:["volátil","Oscila mais de 6% por dia em média: stop largo, por isso o tamanho sugerido é menor."], lucro_atipico:["lucro atípico","P/L abaixo de 3 ou lucro maior que o resultado da operação: confira no balanço se o lucro se repete."]};
+const DESC = {Compra:"10 melhores fundamentos", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
 const CRIT_TEC = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_1m:"1m +",alta_3m:"3m +",forte_vs_ibov:"> Ibov 1m"};
 let dados = [], sel = null, critFund = [];
 
@@ -161,6 +162,7 @@ function render(){
         <div class="niv"><span>Cotação</span><b>R$ ${reais(a.preco)}</b></div>
         <div class="niv loss"><span>Stop loss</span><b>R$ ${reais(a.stop_loss)}</b><small class="neg">${num(a.stop_loss_pct)}%</small></div>
         <div class="niv gain"><span>Stop gain</span><b>R$ ${reais(a.stop_gain)}</b><small class="pos">+${num(a.stop_gain_pct)}%</small></div>
+        <div class="niv tam"><span>Tamanho sugerido</span><b>${a.posicao_pct!=null?num(a.posicao_pct,0)+"%":"—"}</b><small>da carteira</small></div>
         <div class="niv"><span>Preço justo (Graham)</span>${a.graham != null ? `<b>R$ ${reais(a.graham)}</b><small class="${a.graham_pct>=0?'pos':'neg'}">${a.graham_pct>=0?'+':''}${num(a.graham_pct,0)}%</small>` : `<b>—</b>`}</div>
       </div>` : ""}
       <div class="linha"><span><em>P/L</em>${num(f.pl)}</span><span><em>P/VP</em>${num(f.pvp,2)}</span><span><em>ROE</em>${num(f.roe)}%</span><span><em>DY</em>${num(f.dy)}%</span><span><em>Dív.líq/PL</em>${a.financeira?"—":num(f.div_pat,2)}</span><span><em>Receita 5a</em>${f.cresc_rec_5a==null?"—":num(f.cresc_rec_5a)+"%"}</span></div>
