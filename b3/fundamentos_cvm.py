@@ -17,6 +17,7 @@ Saída: b3/dados/fundamentos_trimestrais.csv
 """
 import io
 import json
+import math
 import re
 import sys
 import time
@@ -144,6 +145,31 @@ def resultado_trimestral(dre, anual):
     return dre[meses <= 3]
 
 
+def normalizar_acoes(serie):
+    """Número de ações na mesma base do preço do Yahoo (ajustado por desdobramentos).
+
+    A CVM mistura escalas (milhares num balanço, unidades no outro) e a série muda em
+    desdobramentos/grupamentos, que o Yahoo já desconta no preço. Andando do mais recente
+    para trás: corrige saltos de ×1000; uma variação acima de 30% num trimestre é tratada
+    como desdobramento/grupamento (fica igual à do trimestre seguinte).
+    """
+    v = serie.replace(0, float("nan")).tolist()
+    out = [float("nan")] * len(v)
+    ref = None
+    for i in range(len(v) - 1, -1, -1):
+        x = v[i]
+        if x is None or x != x:
+            continue
+        if ref is None:
+            out[i] = ref = x
+            continue
+        x = min((x * 1000.0 ** k for k in range(-3, 4)), key=lambda y: abs(math.log(y / ref)))
+        if not 0.77 <= x / ref <= 1.3:
+            x = ref
+        out[i] = ref = x
+    return pd.Series(out, index=serie.index).ffill().bfill()
+
+
 def main():
     painel = json.loads(PAINEL.read_text(encoding="utf-8"))
     tickers = [a["papel"] for a in painel["acoes"]]
@@ -213,6 +239,7 @@ def main():
             tudo[c] = float("nan")
     tudo = tudo[cols].sort_values(["empresa", "data"])
     tudo = tudo[tudo["data"].dt.month.isin([3, 6, 9, 12])]
+    tudo["acoes"] = tudo.groupby("empresa")["acoes"].transform(normalizar_acoes)
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     tudo.to_csv(SAIDA, index=False, date_format="%Y-%m-%d")
     ok = tudo.dropna(subset=["lucro", "pl"])
