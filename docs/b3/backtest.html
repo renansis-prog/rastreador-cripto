@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Backtest Ações B3</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: veredito no topo, gráfico das carteiras, tabela de resultados, poder de previsão por faixa */
+:root{
+  --bg:#f3f4f7; --card:#ffffff; --fg:#141a2b; --muted:#5d6579; --line:#dfe2ea; --grid:#eceef3;
+  --accent:#3647c9; --pos:#0f8a5f; --neg:#c23a3a; --aviso-bg:#fbefd2; --aviso:#a06b00;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  --f-body:"Manrope",system-ui,sans-serif; --f-num:"JetBrains Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1220; --card:#181c2e; --fg:#e8ebf5; --muted:#9aa2b8; --line:#2a3048; --grid:#222740;
+  --accent:#8e9bff; --pos:#43d39a; --neg:#ff7b7b; --aviso-bg:#3b2f12; --aviso:#f0b84a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1220; --card:#181c2e; --fg:#e8ebf5; --muted:#9aa2b8; --line:#2a3048; --grid:#222740;
+  --accent:#8e9bff; --pos:#43d39a; --neg:#ff7b7b; --aviso-bg:#3b2f12; --aviso:#f0b84a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--f-body);
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:980px;margin:0 auto;display:grid;gap:18px}
+a{color:var(--accent)}
+h1{margin:0;font-size:1.7rem;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+h2{margin:0 0 8px;font-size:1.1rem;font-weight:800}
+.sub{color:var(--muted);font-size:.88rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.veredito{font-size:1rem}
+.veredito p{margin:.3em 0}
+.aviso{background:var(--aviso-bg);border:1px solid var(--aviso);border-radius:10px;padding:10px 12px;font-size:.88rem}
+.legenda{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;margin-bottom:6px}
+.legenda button{display:inline-flex;align-items:center;gap:6px;font:inherit;color:var(--fg);background:none;border:1px solid var(--line);border-radius:99px;padding:3px 10px;cursor:pointer}
+.legenda button[aria-pressed="false"]{color:var(--muted);opacity:.55}
+.legenda button:focus-visible{outline:2px solid var(--accent)}
+.regra{display:block;font-weight:400;font-size:.78rem;color:var(--muted);white-space:normal;max-width:340px}
+.legenda i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.grafico{position:relative}
+svg.chart{width:100%;height:auto;display:block}
+svg.chart text{fill:var(--muted);font:11px var(--f-num)}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:12px var(--f-num);box-shadow:0 4px 14px rgba(0,0,0,.12);white-space:nowrap}
+.tip div{display:flex;gap:8px;align-items:center}
+.tip i{width:10px;height:3px;border-radius:2px}
+.tabela{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+td{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+td:first-child{font-family:var(--f-body);font-weight:600}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+.melhor{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.nota-rodape{font-size:.82rem;color:var(--muted)}
+.vazio{color:var(--muted);text-align:center;padding:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Backtest Ações B3</h1>
+    <div class="sub" id="sub">Carregando…</div>
+    <div class="sub"><a href="./">← Voltar ao painel da B3</a></div>
+  </header>
+  <div id="conteudo"><div class="card vazio">O backtest ainda não foi gerado. Ele roda pelo workflow "B3" no GitHub (Actions).</div></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const COR = {cdi:"var(--fg)", ibov:"var(--s1)", ibov_tendencia:"var(--s5)", todas:"var(--s2)", top:"var(--s3)", top_mensal:"var(--s8)", forte_ibov:"var(--s6)"};
+const VIS = new Set(["cdi","ibov","ibov_tendencia","top","top_mensal","forte_ibov"]);
+const BASE = new Set(["cdi","ibov","todas"]);
+const pct = (v,d=1) => v==null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(d)}%</span>`;
+const pctTxt = v => v==null ? "—" : `${v>=0?'+':''}${v.toFixed(1)}%`;
+const dataBR = s => s.split("-").reverse().join("/");
+
+function grafico(j){
+  const C = j.curvas, n = C.datas.length; let ids = j.estrategias.map(e=>e.id).filter(k=>VIS.has(k)); if (!ids.length) ids = ['cdi'];
+  const W = Math.max(320, Math.round(document.querySelector('.wrap').clientWidth - 34)), H = Math.round(Math.max(240, Math.min(360, W*0.42))), m = {l:44, r:10, t:10, b:26};
+  const todos = ids.flatMap(k => C[k]).filter(v=>v>0);
+  const lmin = Math.log10(Math.min(...todos)), lmax = Math.log10(Math.max(...todos));
+  const x = i => m.l + i/(n-1)*(W-m.l-m.r);
+  const y = v => m.t + (lmax - Math.log10(v))/(lmax-lmin||1)*(H-m.t-m.b);
+  // ticks "bonitos" na escala log: 1, 2, 5 × 10^k
+  const ticks = [];
+  for (let e = Math.floor(lmin); e <= Math.ceil(lmax); e++) for (const f of (lmax-lmin < 1.2 ? [1,1.5,2,3,5,7] : [1,2,5])) { const v = f*10**e; if (Math.log10(v)>=lmin-1e-9 && Math.log10(v)<=lmax+1e-9) ticks.push(v); }
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolução de R$ 100 em cada estratégia">`;
+  ticks.forEach(v => { s += `<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${m.l-6}" y="${y(v)+4}" text-anchor="end">${v>=1000?(v/1000)+'k':v}</text>`; });
+  if (todos.some(v=>v<=100) && todos.some(v=>v>=100)) s += `<line x1="${m.l}" x2="${W-m.r}" y1="${y(100)}" y2="${y(100)}" stroke="var(--muted)" stroke-dasharray="3 3" stroke-width="1"/>`;
+  const nt = W < 500 ? 3 : 5; for (let k=0;k<=nt;k++){ const i = Math.round(k/nt*(n-1)); const d = C.datas[i].split("-"); s += `<text x="${x(i)}" y="${H-8}" text-anchor="${k===0?'start':k===nt?'end':'middle'}">${d[1]}/${d[0].slice(2)}</text>`; }
+  ids.forEach(k => { s += `<polyline fill="none" stroke="${COR[k]}" stroke-width="2"${k==="cdi"?' stroke-dasharray="6 4"':""} stroke-linejoin="round" points="${C[k].map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}"/>`; });
+  ids.forEach(k => { const v = C[k][n-1]; s += `<circle cx="${x(n-1)}" cy="${y(v)}" r="4" fill="${COR[k]}" stroke="var(--card)" stroke-width="2"/>`; });
+  s += `<line id="cross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+  s += `<rect id="hit" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/></svg>`;
+  return {svg:s, W, m, n, x};
+}
+
+function render(j){
+  window.__bt = j;
+  $("#sub").textContent = `${dataBR(j.periodo.inicio)} a ${dataBR(j.periodo.fim)} (${j.periodo.pregoes} pregões) · ${j.acoes} ações · fonte: ${j.fonte} · gerado em ${new Date(j.gerado_em).toLocaleDateString("pt-BR")}`;
+  const E = Object.fromEntries(j.estrategias.map(e=>[e.id,e]));
+  const cand = j.estrategias.filter(e=>!BASE.has(e.id));
+  const cdi = E.cdi, ibov = E.ibov;
+  const melhorTop = [...cand].sort((a,b)=>b.retorno_total-a.retorno_total)[0];
+  const acimaCdi = cand.filter(e => e.retorno_total > cdi.retorno_total);
+  const acimaIbov = cand.filter(e => e.retorno_total > ibov.retorno_total);
+  const menorQueda = [...cand].sort((a,b)=>b.queda_maxima-a.queda_maxima)[0];
+  const F = Object.fromEntries(j.faixas.map(f=>[f.faixa,f]));
+  const alto = F["80+"], baixo = F["abaixo de 40"];
+  const anos = (j.periodo.pregoes/252).toFixed(1).replace(".",",");
+
+  const g = grafico(j);
+  $("#conteudo").outerHTML = `
+  <section class="card veredito">
+    <h2>Resultado</h2>
+    <p><b>Contra o CDI</b> (${pctTxt(cdi.retorno_anual)} ao ano): ${acimaCdi.length ? `${acimaCdi.length} de ${cand.length} estratégias técnicas renderam mais. A melhor, <b>${melhorTop.nome}</b>, fez ${pctTxt(melhorTop.retorno_anual)} ao ano, com queda máxima de ${pctTxt(melhorTop.queda_maxima)}; o CDI nunca cai.` : `nenhuma estratégia técnica rendeu mais que o CDI. A melhor, <b>${melhorTop.nome}</b>, fez ${pctTxt(melhorTop.retorno_anual)} ao ano.`}</p>
+    <p><b>Contra o Ibovespa</b> (${pctTxt(ibov.retorno_anual)} ao ano, queda máxima de ${pctTxt(ibov.queda_maxima)}): ${acimaIbov.length} de ${cand.length} estratégias renderam mais. Menor queda entre elas: <b>${menorQueda.nome}</b>, com ${pctTxt(menorQueda.queda_maxima)}.</p>
+    ${alto && baixo ? `<p>Poder de previsão: no mês seguinte, ações com nota técnica 80+ renderam em média ${pctTxt(alto.media)} (mediana ${pctTxt(alto.mediana)}), e as abaixo de 40, ${pctTxt(baixo.media)} (mediana ${pctTxt(baixo.mediana)}). ${alto.mediana > baixo.mediana ? "A nota separou as ações na direção certa." : "A nota <b>não</b> separou as ações na direção certa."}</p>` : ""}
+  </section>
+  <div class="aviso">Leia com cautela. Este teste mede só a <b>análise técnica</b>. A nota de fundamentos não entra porque o Fundamentus só mostra os números de hoje, e usá-los no passado daria um resultado bom demais para ser verdade. O teste também usa as ações que estão na bolsa hoje (as que quebraram ficam de fora) e cobre ${anos} anos. Rendimento passado não garante rendimento futuro.</div>
+  <section class="card">
+    <h2>Quanto viraram R$ 100</h2>
+    <div class="legenda" id="legenda">${j.estrategias.map(e=>`<button type="button" data-id="${e.id}" aria-pressed="${VIS.has(e.id)}"><i style="background:${COR[e.id]}"></i>${e.nome}</button>`).join("")}</div>
+    <div class="grafico" id="graf">${g.svg}<div class="tip" id="tip" hidden></div></div>
+    <div class="nota-rodape">Preços ajustados por proventos (dividendos e JCP entram no retorno). A linha tracejada é o CDI; dinheiro fora de ações rende CDI. Toque numa estratégia para mostrar ou esconder. Escala logarítmica. Custo de ${(j.parametros.taxa*100).toFixed(2).replace(".",",")}% por operação; impostos não incluídos.</div>
+  </section>
+  <section class="card">
+    <h2>Comparação</h2>
+    <div class="tabela"><table>
+      <thead><tr><th>Estratégia</th><th>Retorno total</th><th>Por ano</th><th>Queda máxima</th><th>Meses positivos</th></tr></thead>
+      <tbody>${j.estrategias.map(e=>`<tr class="${e.id===melhorTop.id?'melhor':''}"><td><i style="display:inline-block;width:10px;height:3px;border-radius:2px;background:${COR[e.id]};margin-right:6px;vertical-align:middle"></i>${e.nome}${e.regra?`<span class="regra">${e.regra}</span>`:""}</td><td>${pct(e.retorno_total)}</td><td>${pct(e.retorno_anual)}</td><td>${pct(e.queda_maxima)}</td><td>${e.meses_positivos==null?'—':e.meses_positivos.toFixed(0)+'%'}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <div class="nota-rodape">Queda máxima é a maior perda do pico até o fundo: o quanto você teria visto a carteira cair no pior momento.</div>
+  </section>
+  <section class="card">
+    <h2>A nota técnica prevê alguma coisa?</h2>
+    <div class="tabela"><table>
+      <thead><tr><th>Nota técnica</th><th>Média no mês seguinte</th><th>Mediana</th><th>% que subiu</th><th>vs Ibovespa (média)</th><th>vs Ibovespa (mediana)</th><th>Casos</th></tr></thead>
+      <tbody>${j.faixas.map(f=>`<tr><td>${f.faixa}</td><td>${pct(f.media)}</td><td>${pct(f.mediana)}</td><td>${f.positivos.toFixed(0)}%</td><td>${pct(f.vs_ibov_media)}</td><td>${pct(f.vs_ibov_mediana)}</td><td>${f.n}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <div class="nota-rodape">Toda semana cada ação recebeu a nota com os dados daquele dia; aqui está quanto ela rendeu nos 21 pregões seguintes. Se a nota funciona, a faixa 80+ deve render mais que a abaixo de 40.</div>
+  </section>`;
+
+  // hover: linha vertical + valores de cada estratégia
+  const svg = document.querySelector("svg.chart"), hit = svg.querySelector("#hit"), cross = svg.querySelector("#cross"), tip = $("#tip"), graf = $("#graf");
+  function mover(ev){
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) / r.width * g.W;
+    const i = Math.max(0, Math.min(g.n-1, Math.round((px - g.m.l) / (g.W - g.m.l - g.m.r) * (g.n-1))));
+    cross.setAttribute("x1", g.x(i)); cross.setAttribute("x2", g.x(i)); cross.setAttribute("visibility","visible");
+    const linhas = j.estrategias.map(e=>({e, v:j.curvas[e.id][i]})).sort((a,b)=>b.v-a.v);
+    tip.innerHTML = `<b>${dataBR(j.curvas.datas[i])}</b>` + linhas.map(({e,v})=>`<div><i style="background:${COR[e.id]}"></i>${e.nome}: R$ ${v.toFixed(0)}</div>`).join("");
+    tip.hidden = false;
+    const gx = g.x(i)/g.W*r.width, tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(r.width - tw, gx > r.width/2 ? gx - tw - 12 : gx + 12)) + "px";
+    tip.style.top = "8px";
+  }
+  hit.addEventListener("pointermove", mover);
+  hit.addEventListener("pointerdown", mover);
+  graf.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility","hidden"); });
+}
+
+function rerender(){ if (!window.__bt) return; const c = document.querySelectorAll('.wrap > section, .wrap > .aviso'); c.forEach((el,i) => i ? el.remove() : el.replaceWith(Object.assign(document.createElement('div'), {id:'conteudo'}))); render(window.__bt); }
+document.addEventListener("click", ev => { const b = ev.target.closest("#legenda button"); if (!b) return; const id = b.dataset.id; VIS.has(id) ? VIS.delete(id) : VIS.add(id); rerender(); });
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (!window.__bt) return; const c = document.querySelectorAll('.wrap > section, .wrap > .aviso'); c.forEach((el,i) => i ? el.remove() : el.replaceWith(Object.assign(document.createElement('div'), {id:'conteudo'}))); render(window.__bt); }, 200); });
+fetch("backtest.json", {cache:"no-store"}).then(r => { if(!r.ok) throw 0; return r.json(); }).then(render).catch(()=>{ $("#sub").textContent = "Sem resultados ainda."; });
+</script>
+</body>
+</html>

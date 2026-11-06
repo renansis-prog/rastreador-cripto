@@ -48,3 +48,22 @@ No topo de `rastreador.py`: `TOP_MARKET_CAP`, `VOLUME_MINIMO_USD`, `MAX_MOEDAS` 
 Os pesos da nota ficam em `PESOS`.
 
 > Triagem técnica, não recomendação de investimento.
+
+---
+
+# Ações B3 (pasta `b3/`)
+
+Mesmo princípio, para ações da B3, juntando **fundamentos** (Fundamentus) e **análise técnica** (Yahoo Finance).
+
+- Painel: `https://renansis-prog.github.io/rastreador-cripto/b3/`
+- Backtest: `https://renansis-prog.github.io/rastreador-cripto/b3/backtest.html`
+- Atualiza nos dias úteis às 19:37 (Brasília); backtest no dia 2 de cada mês. Não precisa de chave.
+
+**Sinal:** Compra (fundamentos 60+ e técnica 70+) · Observar (fundamentos 60+, técnica < 70) ·
+Neutra (fundamentos 40–59) · Evitar (fundamentos < 40).
+
+**Fundamentos (0–100):** P/L 0–15 (15) · P/VP ≤ 2 (10) · EV/EBIT 0–10 (15) · ROE ≥ 15% (15) · ROIC ≥ 10% (10) ·
+margem líquida ≥ 10% (10) · dívida bruta ≤ 1× patrimônio (10) · receita +5% a.a. em 5 anos (10) · DY ≥ 4% (5).
+Bancos e seguradoras: só os critérios que se aplicam. Prejuízo limita a nota a 30.
+
+O backtest mede só a parte técnica (com caixa rendendo CDI), porque o Fundamentus não tem histórico dos indicadores.

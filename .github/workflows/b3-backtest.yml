@@ -1,0 +1,41 @@
+name: B3 - backtest
+
+on:
+  schedule:
+    - cron: "53 5 2 * *"      # dia 2 de cada mês, 02:53 (Brasília)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["b3/backtest_b3.py", ".github/workflows/b3-backtest.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: b3-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r b3/requirements.txt
+      - name: Pegar a lista de ações mais recente do painel
+        run: git pull --ff-only origin main || true
+      - name: Rodar backtest
+        run: python b3/backtest_b3.py
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Salvar resultado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/b3/backtest.json
+          git diff --cached --quiet || git commit -m "B3: atualiza backtest $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push

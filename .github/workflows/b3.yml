@@ -1,0 +1,39 @@
+name: B3 - atualizar rastreador
+
+on:
+  schedule:
+    - cron: "37 22 * * 1-5"   # dias úteis, 19:37 (Brasília), depois do fechamento da B3
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["b3/rastreador_b3.py", "b3/requirements.txt", ".github/workflows/b3.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: b3-rastreador
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r b3/requirements.txt
+      - name: Calcular notas e sinais
+        run: python b3/rastreador_b3.py
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Salvar resultado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/b3/data.json
+          git diff --cached --quiet || git commit -m "B3: atualiza dados $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rastreador Ações B3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: clima do Ibovespa, contagem por sinal (filtro), lista de ações com nota de fundamentos e nota técnica lado a lado */
+:root{
+  --bg:#f3f4f7; --card:#ffffff; --fg:#141a2b; --muted:#5d6579; --line:#dfe2ea;
+  --accent:#3647c9; --alta:#0f8a5f; --alta-bg:#dcf3ea; --lat:#a06b00; --lat-bg:#fbefd2;
+  --baixa:#c23a3a; --baixa-bg:#fbe1e1; --obs:#2f6fb0; --obs-bg:#dfeaf7; --neu:#5d6579; --neu-bg:#eceef3;
+  --f-body:"Manrope",system-ui,sans-serif; --f-num:"JetBrains Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1220; --card:#181c2e; --fg:#e8ebf5; --muted:#9aa2b8; --line:#2a3048;
+  --accent:#8e9bff; --alta:#43d39a; --alta-bg:#123a2c; --lat:#f0b84a; --lat-bg:#3b2f12;
+  --baixa:#ff7b7b; --baixa-bg:#3e1b1f; --obs:#7fb2ee; --obs-bg:#16304d; --neu:#9aa2b8; --neu-bg:#232842; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1220; --card:#181c2e; --fg:#e8ebf5; --muted:#9aa2b8; --line:#2a3048;
+  --accent:#8e9bff; --alta:#43d39a; --alta-bg:#123a2c; --lat:#f0b84a; --lat-bg:#3b2f12;
+  --baixa:#ff7b7b; --baixa-bg:#3e1b1f; --obs:#7fb2ee; --obs-bg:#16304d; --neu:#9aa2b8; --neu-bg:#232842; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);
+  padding:20px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+a{color:var(--accent)}
+.wrap{max-width:980px;margin:0 auto;display:grid;gap:18px}
+h1{margin:0;font-size:1.7rem;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+.sub{color:var(--muted);font-size:.88rem}
+.links{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.88rem}
+.clima{border-radius:10px;padding:10px 12px;font-size:.9rem;border:1px solid var(--line);background:var(--card)}
+.clima.alta{border-color:var(--alta);background:var(--alta-bg)}
+.clima.baixa{border-color:var(--baixa);background:var(--baixa-bg)}
+.clima.transicao{border-color:var(--lat);background:var(--lat-bg)}
+.aviso{background:var(--lat-bg);border:1px solid var(--lat);border-radius:10px;padding:10px 12px;font-size:.88rem}
+.faixas{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.faixa{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px;cursor:pointer;text-align:left;color:var(--fg);font:inherit}
+.faixa[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
+.faixa b{display:block;font:600 1.4rem var(--f-num)}
+.faixa span{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.faixa small{display:block;font-size:.72rem;color:var(--muted);margin-top:2px}
+.filtros{display:flex;flex-wrap:wrap;gap:8px}
+.filtros input,.filtros select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);min-width:0}
+.filtros input{flex:1 1 160px}
+.lista{display:grid;gap:8px}
+.acao{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:6px 14px;align-items:center}
+.notas{display:flex;gap:6px}
+.nota{width:50px;text-align:center;border-radius:10px;padding:4px 0;background:var(--neu-bg)}
+.nota b{display:block;font:600 1.05rem var(--f-num)}
+.nota span{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.nome{min-width:0}
+.nome strong{font-size:1.05rem}
+.nome .preco{font:400 .82rem var(--f-num);color:var(--muted)}
+.pill{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 9px;border-radius:99px;margin-left:6px;vertical-align:2px}
+.s-Compra{background:var(--alta-bg);color:var(--alta)}
+.s-Observar{background:var(--obs-bg);color:var(--obs)}
+.s-Neutra{background:var(--neu-bg);color:var(--neu)}
+.s-Evitar{background:var(--baixa-bg);color:var(--baixa)}
+.tag{display:inline-block;font-size:.68rem;font-weight:600;padding:1px 7px;border-radius:99px;margin-left:4px;vertical-align:2px;background:var(--lat-bg);color:var(--lat)}
+svg.spark{width:110px;height:36px}
+.linha{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px;font:400 .8rem var(--f-num);font-variant-numeric:tabular-nums}
+.linha em{font-style:normal;color:var(--muted);margin-right:4px}
+.pos{color:var(--alta)} .neg{color:var(--baixa)}
+.crit{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px}
+.crit span{font-size:.68rem;padding:1px 7px;border-radius:6px;border:1px solid var(--line);color:var(--muted)}
+.crit span.ok{border-color:var(--alta);color:var(--alta)}
+.crit span.na{border-style:dashed;opacity:.6}
+details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:.88rem}
+summary{cursor:pointer;font-weight:600}
+.vazio{color:var(--muted);text-align:center;padding:30px}
+@media (max-width:560px){.faixas{grid-template-columns:repeat(2,1fr)} svg.spark{width:76px} .acao{grid-template-columns:1fr auto} .notas{grid-column:1/-1;order:-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Rastreador Ações B3</h1>
+    <div class="sub" id="sub">Carregando dados…</div>
+    <div class="links"><a href="backtest.html">Ver backtest →</a><a href="../">Rastreador de criptos</a></div>
+  </header>
+  <div class="clima" id="clima" hidden></div>
+  <div class="faixas" id="faixas"></div>
+  <div class="filtros">
+    <input id="busca" type="search" placeholder="Buscar ação (ex: PETR)" aria-label="Buscar ação">
+    <select id="ordem" aria-label="Ordenar por">
+      <option value="nota_final">Ordenar: sinal e nota final</option>
+      <option value="nota_fund">Nota de fundamentos</option>
+      <option value="nota_tec">Nota técnica</option>
+      <option value="ret_1m">Retorno 1 mês</option>
+      <option value="vs_ibov_1m">Força vs Ibovespa</option>
+      <option value="dy">Dividend yield</option>
+      <option value="liquidez">Liquidez</option>
+    </select>
+  </div>
+  <div class="lista" id="lista"><div class="vazio">O painel ainda não foi gerado. Ele roda pelo workflow "B3" no GitHub (Actions).</div></div>
+  <details>
+    <summary>Como as notas e o sinal são calculados</summary>
+    <p><b>Fundamentos (0–100)</b>, com dados do Fundamentus:</p>
+    <ul id="lista-fund"></ul>
+    <p>Bancos e seguradoras não têm EV/EBIT, ROIC, margem e dívida comparáveis; para eles a nota usa só os outros critérios. Empresa com prejuízo (P/L negativo) fica com no máximo 30.</p>
+    <p><b>Técnica (0–100)</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
+    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> fundamentos 60+ e técnica 70+ · <span class="pill s-Observar">Observar</span> fundamentos 60+, técnica abaixo de 70 · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p>Entram as ações com liquidez média de R$ 5 milhões por dia ou mais, uma por empresa. É uma triagem por regras fixas, não recomendação de investimento.</p>
+  </details>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const SINAIS = ["Compra","Observar","Neutra","Evitar"];
+const DESC = {Compra:"bons fundamentos, tendência a favor", Observar:"bons fundamentos, esperar tendência", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
+const CRIT_TEC = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_1m:"1m +",alta_3m:"3m +",forte_vs_ibov:"> Ibov 1m"};
+let dados = [], sel = null, critFund = [];
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = v => v == null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+const num = (v, d=1) => v == null ? "—" : v.toLocaleString("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d});
+const reais = v => v == null ? "—" : v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const mi = v => v == null ? "—" : v >= 1e9 ? num(v/1e9,1)+" bi" : num(v/1e6,0)+" mi";
+const corNota = n => n >= 70 ? "var(--alta-bg)" : n >= 40 ? "var(--lat-bg)" : "var(--baixa-bg)";
+
+function spark(s){
+  if(!s || s.length < 2) return "<span></span>";
+  const mn = Math.min(...s), mx = Math.max(...s), w = 110, h = 36;
+  const pts = s.map((v,i)=>`${(i/(s.length-1)*w).toFixed(1)},${(h-2-(v-mn)/(mx-mn||1)*(h-4)).toFixed(1)}`).join(" ");
+  const cor = s[s.length-1] >= s[0] ? "var(--alta)" : "var(--baixa)";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="Preço últimos 6 meses"><polyline fill="none" stroke="${cor}" stroke-width="1.6" points="${pts}"/></svg>`;
+}
+
+function valor(a, k){ return k === "dy" || k === "liquidez" ? a.fund[k] : a[k]; }
+
+function render(){
+  const q = $("#busca").value.trim().toUpperCase(), ord = $("#ordem").value;
+  let l = dados.filter(a => (!q || a.papel.includes(q)) && (!sel || a.sinal === sel));
+  if (ord === "nota_final") l.sort((a,b) => SINAIS.indexOf(a.sinal) - SINAIS.indexOf(b.sinal) || b.nota_final - a.nota_final);
+  else l.sort((a,b) => (valor(b,ord) ?? -1e12) - (valor(a,ord) ?? -1e12));
+  $("#lista").innerHTML = l.length ? l.map(a => {
+    const f = a.fund;
+    const rsi = a.rsi14 > 70 ? `<span class="tag">RSI ${a.rsi14.toFixed(0)} · esticada</span>` : "";
+    return `<div class="acao">
+      <div class="notas"><div class="nota" style="background:${corNota(a.nota_fund)}"><b>${a.nota_fund}</b><span>Fund.</span></div><div class="nota" style="background:${corNota(a.nota_tec)}"><b>${Math.round(a.nota_tec)}</b><span>Téc.</span></div></div>
+      <div class="nome"><strong>${esc(a.papel)}</strong><span class="pill s-${a.sinal}">${a.sinal}</span>${a.financeira?'<span class="tag" style="background:var(--neu-bg);color:var(--neu)">financeira</span>':''}${rsi}
+        <div class="preco">R$ ${reais(a.preco ?? f.cotacao)} · liquidez R$ ${mi(f.liquidez)}/dia${a.historico_curto?" · histórico curto":""}</div></div>
+      ${spark(a.sparkline)}
+      <div class="linha"><span><em>P/L</em>${num(f.pl)}</span><span><em>P/VP</em>${num(f.pvp,2)}</span><span><em>ROE</em>${num(f.roe)}%</span><span><em>DY</em>${num(f.dy)}%</span><span><em>Dív/PL</em>${a.financeira?"—":num(f.div_pat,2)}</span><span><em>Receita 5a</em>${f.cresc_rec_5a==null?"—":num(f.cresc_rec_5a)+"%"}</span></div>
+      <div class="linha"><span><em>1 sem</em>${pct(a.ret_1s)}</span><span><em>1 mês</em>${pct(a.ret_1m)}</span><span><em>3 meses</em>${pct(a.ret_3m)}</span><span><em>vs Ibov 1m</em>${pct(a.vs_ibov_1m)}</span><span><em>vs MM200</em>${pct(a.dist_mm200)}</span></div>
+      <div class="crit">${critFund.map(c => { const v = a.criterios_fund[c.id]; return `<span class="${v===null?'na':v?'ok':''}" title="${esc(c.texto)}">${v===null?'–':v?'✓':'·'} ${esc(c.texto)}</span>`; }).join("")}</div>
+      ${a.criterios_tec ? `<div class="crit">${Object.entries(CRIT_TEC).map(([k,t])=>`<span class="${a.criterios_tec[k]?'ok':''}">${a.criterios_tec[k]?'✓':'·'} ${t}</span>`).join("")}</div>` : ""}
+    </div>`;}).join("") : `<div class="vazio">Nenhuma ação com esse filtro.</div>`;
+}
+
+function faixas(){
+  $("#faixas").innerHTML = SINAIS.map(s => `<button class="faixa" aria-pressed="${sel===s}" data-s="${s}"><b>${dados.filter(a=>a.sinal===s).length}</b><span>${s}</span><small>${DESC[s]}</small></button>`).join("");
+  document.querySelectorAll(".faixa").forEach(b => b.onclick = () => { sel = sel === b.dataset.s ? null : b.dataset.s; faixas(); render(); });
+}
+
+function carregar(j){
+  dados = j.acoes || [];
+  critFund = j.parametros.criterios_fund;
+  $("#lista-fund").innerHTML = critFund.map(c => `<li>${esc(c.texto)}: ${c.pontos} pontos${c.bancos?"":" (não vale para bancos)"}</li>`).join("");
+  $("#sub").textContent = `${dados.length} ações · Fundamentus + Yahoo Finance · atualizado em ${new Date(j.atualizado_em).toLocaleString("pt-BR")}`;
+  const c = j.mercado;
+  if (c && c.estado && c.estado !== "indefinido"){
+    const t = {alta:["Ibovespa em alta","acima da média de 200 pregões, com a MM50 acima da MM200. Sinais de compra tendem a funcionar melhor."],
+      baixa:["Ibovespa em baixa","abaixo da média de 200 pregões. Nesse clima até boas empresas costumam cair junto."],
+      transicao:["Ibovespa em transição","entre os sinais de alta e de baixa."]}[c.estado];
+    const el = $("#clima"); el.hidden = false; el.className = "clima " + c.estado;
+    el.innerHTML = `<b>${t[0]}</b>: ${t[1]} (${num(c.ibov,0)} pontos, ${c.ibov_dist_mm200>=0?"+":""}${num(c.ibov_dist_mm200)}% vs MM200 · 1 mês ${pct(c.ibov_ret_1m)})`;
+  }
+  faixas(); render();
+}
+
+$("#busca").oninput = render; $("#ordem").onchange = render;
+fetch("data.json", {cache:"no-store"}).then(r => { if(!r.ok) throw 0; return r.json(); }).then(carregar)
+  .catch(() => { $("#sub").textContent = "Sem dados ainda."; });
+</script>
+</body>
+</html>
