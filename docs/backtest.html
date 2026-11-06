@@ -10,18 +10,18 @@
 :root{
   --bg:#f3f4f7; --card:#ffffff; --fg:#141a2b; --muted:#5d6579; --line:#dfe2ea; --grid:#eceef3;
   --accent:#3647c9; --pos:#0f8a5f; --neg:#c23a3a; --aviso-bg:#fbefd2; --aviso:#a06b00;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
   --f-body:"Manrope",system-ui,sans-serif; --f-num:"JetBrains Mono",ui-monospace,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0f1220; --card:#181c2e; --fg:#e8ebf5; --muted:#9aa2b8; --line:#2a3048; --grid:#222740;
   --accent:#8e9bff; --pos:#43d39a; --neg:#ff7b7b; --aviso-bg:#3b2f12; --aviso:#f0b84a;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; color-scheme:dark}}
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1220; --card:#181c2e; --fg:#e8ebf5; --muted:#9aa2b8; --line:#2a3048; --grid:#222740;
   --accent:#8e9bff; --pos:#43d39a; --neg:#ff7b7b; --aviso-bg:#3b2f12; --aviso:#f0b84a;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; color-scheme:dark}
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767; color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--f-body);
   padding:20px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
@@ -35,7 +35,10 @@ h2{margin:0 0 8px;font-size:1.1rem;font-weight:800}
 .veredito p{margin:.3em 0}
 .aviso{background:var(--aviso-bg);border:1px solid var(--aviso);border-radius:10px;padding:10px 12px;font-size:.88rem}
 .legenda{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;margin-bottom:6px}
-.legenda span{display:inline-flex;align-items:center;gap:6px}
+.legenda button{display:inline-flex;align-items:center;gap:6px;font:inherit;color:var(--fg);background:none;border:1px solid var(--line);border-radius:99px;padding:3px 10px;cursor:pointer}
+.legenda button[aria-pressed="false"]{color:var(--muted);opacity:.55}
+.legenda button:focus-visible{outline:2px solid var(--accent)}
+.regra{display:block;font-weight:400;font-size:.78rem;color:var(--muted);white-space:normal;max-width:340px}
 .legenda i{width:14px;height:3px;border-radius:2px;display:inline-block}
 .grafico{position:relative}
 svg.chart{width:100%;height:auto;display:block}
@@ -67,13 +70,15 @@ td:first-child{font-family:var(--f-body);font-weight:600}
 </div>
 <script>
 const $ = s => document.querySelector(s);
-const COR = {btc:"var(--s1)", todas:"var(--s2)", top:"var(--s3)", top_clima:"var(--s4)", top_clima_saida:"var(--s5)"};
+const COR = {btc:"var(--s1)", todas:"var(--s2)", top:"var(--s3)", top_clima_saida:"var(--s4)", btc_tendencia:"var(--s5)", forte_btc:"var(--s6)", nucleo:"var(--s7)", top_mensal:"var(--s8)", top_clima:"var(--s5)"};
+const VIS = new Set(["btc","top","btc_tendencia","forte_btc","nucleo","top_mensal"]);
+const BASE = new Set(["btc","todas"]);
 const pct = (v,d=1) => v==null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(d)}%</span>`;
 const pctTxt = v => v==null ? "—" : `${v>=0?'+':''}${v.toFixed(1)}%`;
 const dataBR = s => s.split("-").reverse().join("/");
 
 function grafico(j){
-  const C = j.curvas, ids = j.estrategias.map(e=>e.id), n = C.datas.length;
+  const C = j.curvas, n = C.datas.length; let ids = j.estrategias.map(e=>e.id).filter(k=>VIS.has(k)); if (!ids.length) ids = ['btc'];
   const W = Math.max(320, Math.round(document.querySelector('.wrap').clientWidth - 34)), H = Math.round(Math.max(240, Math.min(360, W*0.42))), m = {l:44, r:10, t:10, b:26};
   const todos = ids.flatMap(k => C[k]).filter(v=>v>0);
   const lmin = Math.log10(Math.min(...todos)), lmax = Math.log10(Math.max(...todos));
@@ -97,9 +102,10 @@ function render(j){
   window.__bt = j;
   $("#sub").textContent = `${dataBR(j.periodo.inicio)} a ${dataBR(j.periodo.fim)} (${j.periodo.dias} dias) · ${j.moedas} moedas · fonte: ${j.fonte} · gerado em ${new Date(j.gerado_em).toLocaleDateString("pt-BR")}`;
   const E = Object.fromEntries(j.estrategias.map(e=>[e.id,e]));
-  const btc = E.btc, melhorTop = ["top","top_clima","top_clima_saida"].map(k=>E[k]).sort((a,b)=>b.retorno_total-a.retorno_total)[0];
+  const cand = j.estrategias.filter(e=>!BASE.has(e.id));
+  const btc = E.btc, melhorTop = [...cand].sort((a,b)=>b.retorno_total-a.retorno_total)[0];
   const venceu = melhorTop.retorno_total > btc.retorno_total;
-  const menorQueda = ["top","top_clima","top_clima_saida"].map(k=>E[k]).sort((a,b)=>b.queda_maxima-a.queda_maxima)[0];
+  const menorQueda = [...cand].sort((a,b)=>b.queda_maxima-a.queda_maxima)[0];
   const F = Object.fromEntries(j.faixas.map(f=>[f.faixa,f]));
   const prev = F["Alta forte"].d30 && F["Baixa"].d30 ? F["Alta forte"].d30.media - F["Baixa"].d30.media : null;
 
@@ -107,22 +113,22 @@ function render(j){
   $("#conteudo").outerHTML = `
   <section class="card veredito">
     <h2>Resultado</h2>
-    <p>${venceu ? `A melhor versão da nota (<b>${melhorTop.nome}</b>) rendeu <b>${pctTxt(melhorTop.retorno_total)}</b>, contra <b>${pctTxt(btc.retorno_total)}</b> de quem só segurou Bitcoin.` : `Nenhuma versão da nota superou o Bitcoin no período: a melhor (<b>${melhorTop.nome}</b>) rendeu <b>${pctTxt(melhorTop.retorno_total)}</b>, contra <b>${pctTxt(btc.retorno_total)}</b> do BTC.`}</p>
-    <p>Menor queda máxima entre as versões da nota: <b>${menorQueda.nome}</b>, com ${pctTxt(menorQueda.queda_maxima)} (BTC: ${pctTxt(btc.queda_maxima)}).</p>
+    <p>${venceu ? `A melhor estratégia de análise técnica (<b>${melhorTop.nome}</b>) rendeu <b>${pctTxt(melhorTop.retorno_total)}</b>, contra <b>${pctTxt(btc.retorno_total)}</b> de quem só segurou Bitcoin.` : `Nenhuma estratégia de análise técnica superou o Bitcoin no período: a melhor (<b>${melhorTop.nome}</b>) rendeu <b>${pctTxt(melhorTop.retorno_total)}</b>, contra <b>${pctTxt(btc.retorno_total)}</b> do BTC.`}</p>
+    <p>Menor queda máxima entre as estratégias: <b>${menorQueda.nome}</b>, com ${pctTxt(menorQueda.queda_maxima)} (BTC: ${pctTxt(btc.queda_maxima)}).</p>
     ${prev!=null ? `<p>Poder de previsão: nos 30 dias seguintes, moedas em "Alta forte" renderam em média ${pctTxt(F["Alta forte"].d30.media)}, e as em "Baixa", ${pctTxt(F["Baixa"].d30.media)}. ${prev>0?"A nota separou as moedas na direção certa.":"A nota <b>não</b> separou as moedas na direção certa nesse período."}</p>`:""}
   </section>
   <div class="aviso">Leia com cautela. O teste usa as moedas que existem <b>hoje</b>, então deixa de fora as que sumiram no caminho, e isso deixa o resultado mais bonito do que seria na vida real. Também só cobre ${Math.round(j.periodo.dias/30)} meses, com o mercado em alta em ${Math.round(j.clima_dias_em_alta_pct)}% dos dias. Rendimento passado não garante rendimento futuro.</div>
   <section class="card">
     <h2>Quanto viraram R$ 100</h2>
-    <div class="legenda">${j.estrategias.map(e=>`<span><i style="background:${COR[e.id]}"></i>${e.nome}</span>`).join("")}</div>
+    <div class="legenda" id="legenda">${j.estrategias.map(e=>`<button type="button" data-id="${e.id}" aria-pressed="${VIS.has(e.id)}"><i style="background:${COR[e.id]}"></i>${e.nome}</button>`).join("")}</div>
     <div class="grafico" id="graf">${g.svg}<div class="tip" id="tip" hidden></div></div>
-    <div class="nota-rodape">Escala logarítmica: a mesma distância vertical equivale à mesma variação percentual. Rebalanceamento semanal, taxa de ${(j.parametros.taxa*100).toFixed(1)}% por operação.</div>
+    <div class="nota-rodape">Toque numa estratégia para mostrar ou esconder. Escala logarítmica: a mesma distância vertical equivale à mesma variação percentual. Taxa de ${(j.parametros.taxa*100).toFixed(1)}% por operação.</div>
   </section>
   <section class="card">
     <h2>Comparação</h2>
     <div class="tabela"><table>
       <thead><tr><th>Estratégia</th><th>Retorno total</th><th>Por ano</th><th>Queda máxima</th><th>Semanas positivas</th></tr></thead>
-      <tbody>${j.estrategias.map(e=>`<tr class="${e.id===melhorTop.id?'melhor':''}"><td><i style="display:inline-block;width:10px;height:3px;border-radius:2px;background:${COR[e.id]};margin-right:6px;vertical-align:middle"></i>${e.nome}</td><td>${pct(e.retorno_total)}</td><td>${pct(e.retorno_anual)}</td><td>${pct(e.queda_maxima)}</td><td>${e.semanas_positivas==null?'—':e.semanas_positivas.toFixed(0)+'%'}</td></tr>`).join("")}</tbody>
+      <tbody>${j.estrategias.map(e=>`<tr class="${e.id===melhorTop.id?'melhor':''}"><td><i style="display:inline-block;width:10px;height:3px;border-radius:2px;background:${COR[e.id]};margin-right:6px;vertical-align:middle"></i>${e.nome}${e.regra?`<span class="regra">${e.regra}</span>`:""}</td><td>${pct(e.retorno_total)}</td><td>${pct(e.retorno_anual)}</td><td>${pct(e.queda_maxima)}</td><td>${e.semanas_positivas==null?'—':e.semanas_positivas.toFixed(0)+'%'}</td></tr>`).join("")}</tbody>
     </table></div>
     <div class="nota-rodape">Queda máxima é a maior perda do pico até o fundo. É o quanto você teria visto a carteira cair no pior momento.</div>
   </section>
@@ -153,6 +159,8 @@ function render(j){
   graf.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility","hidden"); });
 }
 
+function rerender(){ if (!window.__bt) return; const c = document.querySelectorAll('.wrap > section, .wrap > .aviso'); c.forEach((el,i) => i ? el.remove() : el.replaceWith(Object.assign(document.createElement('div'), {id:'conteudo'}))); render(window.__bt); }
+document.addEventListener("click", ev => { const b = ev.target.closest("#legenda button"); if (!b) return; const id = b.dataset.id; VIS.has(id) ? VIS.delete(id) : VIS.add(id); rerender(); });
 let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (!window.__bt) return; const c = document.querySelectorAll('.wrap > section, .wrap > .aviso'); c.forEach((el,i) => i ? el.remove() : el.replaceWith(Object.assign(document.createElement('div'), {id:'conteudo'}))); render(window.__bt); }, 200); });
 fetch("backtest.json", {cache:"no-store"}).then(r => { if(!r.ok) throw 0; return r.json(); }).then(render).catch(()=>{ $("#sub").textContent = "Sem resultados ainda."; });
 </script>

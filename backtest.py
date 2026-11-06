@@ -171,8 +171,40 @@ def metricas(curva, datas):
     }
 
 
-def simular(datas, S, notas_por_dia, clima_por_dia, mm50_por_dia, inicio, modo):
-    """modo: 'btc' | 'todas' | 'top' | 'top_clima' | 'top_clima_saida'"""
+def selecionar(modo, notas_dia, clima_dia, btc_dia):
+    """Carteira-alvo num dia de rebalanceamento: {moeda: peso}. O que faltar para 100% fica em caixa."""
+    if modo == "btc":
+        return {"BTC": 1.0}
+    if modo == "todas":
+        return {m: 1 / len(notas_dia) for m in notas_dia} if notas_dia else {}
+    if modo == "btc_tendencia":
+        return {"BTC": 1.0} if btc_dia["acima_mm200"] else {}
+    if modo in ("top", "top_mensal", "top_clima", "top_clima_saida"):
+        if modo.startswith("top_clima") and clima_dia != "alta":
+            return {}
+        ordem = sorted(notas_dia.items(), key=lambda kv: (kv[1]["nota"], kv[1]["ret_30d"]), reverse=True)
+        top = [m for m, _ in ordem[:TOP_N]]
+        return {m: 1 / len(top) for m in top} if top else {}
+    if modo in ("forte_btc", "nucleo"):
+        r90_btc = btc_dia["ret_90d"]
+        elegiveis = [
+            (m, n) for m, n in notas_dia.items()
+            if m != "BTC" and n["nota"] >= 60
+            and n["vs_btc_30d"] is not None and n["vs_btc_30d"] > 0
+            and n["ret_90d"] is not None and r90_btc is not None and n["ret_90d"] > r90_btc
+        ]
+        elegiveis.sort(key=lambda kv: (kv[1]["nota"], kv[1]["vs_btc_30d"]), reverse=True)
+        vagas, base = (TOP_N, 0.0) if modo == "forte_btc" else (5, 0.5)
+        escolhidas = [m for m, _ in elegiveis[:vagas]]
+        pesos = {m: 0.1 for m in escolhidas}
+        pesos["BTC"] = 1 - 0.1 * len(escolhidas)       # vagas vazias ficam em BTC
+        if base:
+            pesos["BTC"] = max(pesos["BTC"], base)
+        return pesos
+    raise ValueError(modo)
+
+
+def simular(datas, S, notas_por_dia, clima_por_dia, btc_por_dia, mm50_por_dia, inicio, modo, periodo, saida=False):
     caixa, pos = 100.0, {}
     curva, ultimo_reb = [], None
     for i in range(inicio, len(datas)):
@@ -186,29 +218,18 @@ def simular(datas, S, notas_por_dia, clima_por_dia, mm50_por_dia, inicio, modo):
                     caixa += pos.pop(m) * (1 - TAXA)
         total = caixa + sum(pos.values())
 
-        # 2) decide a carteira-alvo
-        alvo = None
-        if ultimo_reb is None or i - ultimo_reb >= REBALANCEAR_A_CADA:
+        # 2) rebalanceia nos dias marcados
+        if ultimo_reb is None or i - ultimo_reb >= periodo:
             ultimo_reb = i
-            if modo == "btc":
-                alvo = ["BTC"]
-            elif modo == "todas":
-                alvo = [m for m, n in notas_por_dia[i].items()]
-            else:
-                if modo != "top" and clima_por_dia[i] != "alta":
-                    alvo = []
-                else:
-                    ordem = sorted(notas_por_dia[i].items(), key=lambda kv: (kv[1][0], kv[1][1]), reverse=True)
-                    alvo = [m for m, _ in ordem[:TOP_N]]
-        if alvo is not None:
-            pesos = {m: total / len(alvo) for m in alvo} if alvo else {}
-            giro = sum(abs(pesos.get(m, 0) - pos.get(m, 0)) for m in set(pesos) | set(pos))
-            total -= giro * TAXA
-            pos = {m: total / len(alvo) for m in alvo} if alvo else {}
-            caixa = 0.0 if alvo else total
+            pesos = selecionar(modo, notas_por_dia[i], clima_por_dia[i], btc_por_dia[i])
+            alvo = {m: total * w for m, w in pesos.items() if w > 0}
+            giro = sum(abs(alvo.get(m, 0) - pos.get(m, 0)) for m in set(alvo) | set(pos))
+            fator = 1 - giro * TAXA / total if total else 1
+            pos = {m: v * fator for m, v in alvo.items()}
+            caixa = total * fator - sum(pos.values())
 
         # 3) regra de saída diária
-        if modo == "top_clima_saida":
+        if saida:
             for m in list(pos):
                 mm = mm50_por_dia[i].get(m)
                 p = preco(S[m], i)
@@ -227,12 +248,14 @@ def main():
         raise SystemExit("Histórico curto demais para um backtest útil.")
 
     # Pré-calcula, para cada dia do teste, nota de cada moeda, clima e MM50
-    notas, clima, mm50 = {}, {}, {}
+    notas, clima, mm50, btc_info = {}, {}, {}, {}
     btc_all = S["BTC"]
     for i in range(inicio, len(datas)):
         btc = ate(btc_all, i)
         btc_r30 = R.retorno(btc, 30)
         clima[i] = R.clima_do_mercado(btc)["estado"]
+        mm200_btc = R.media(btc, 200)
+        btc_info[i] = {"ret_90d": R.retorno(btc, 90), "acima_mm200": mm200_btc is not None and btc[-1] > mm200_btc}
         notas[i], mm50[i] = {}, {}
         reb = (i - inicio) % REBALANCEAR_A_CADA == 0
         for m, arr in S.items():
@@ -244,21 +267,26 @@ def main():
             if reb:
                 a = R.analisar(c, None if m == "BTC" else btc_r30)
                 if a:
-                    notas[i][m] = (a["nota"], a["ret_30d"] or 0, a["classe"])
+                    notas[i][m] = {"nota": a["nota"], "ret_30d": a["ret_30d"] or 0, "classe": a["classe"],
+                                   "vs_btc_30d": a["vs_btc_30d"], "ret_90d": a["ret_90d"]}
         # nos dias sem rebalanceamento a simulação não lê as notas
 
-    estrategias = {
-        "btc": "BTC (comprar e segurar)",
-        "todas": "Todas as moedas (média)",
-        "top": f"Top {TOP_N} da nota",
-        "top_clima": f"Top {TOP_N} + clima do mercado",
-        "top_clima_saida": f"Top {TOP_N} + clima + saída na MM50",
-    }
+    # (id, nome, como funciona, rebalancear a cada N dias, regra de saída na MM50)
+    estrategias = [
+        ("btc", "BTC (comprar e segurar)", "Compra Bitcoin no início e não mexe mais.", REBALANCEAR_A_CADA, False),
+        ("todas", "Todas as moedas (média)", "Pesos iguais em todas as moedas do universo, rebalanceado toda semana.", REBALANCEAR_A_CADA, False),
+        ("top", f"Top {TOP_N} da nota", f"As {TOP_N} moedas de maior nota, trocadas toda semana.", REBALANCEAR_A_CADA, False),
+        ("top_clima_saida", f"Top {TOP_N} + clima + saída na MM50", "Igual ao Top 10, mas só investe com o BTC em alta e vende a moeda que fecha abaixo da MM50.", REBALANCEAR_A_CADA, True),
+        ("btc_tendencia", "BTC só em tendência", "Fica em Bitcoin quando ele está acima da MM200; abaixo, fica em caixa. Checado toda semana.", REBALANCEAR_A_CADA, False),
+        ("forte_btc", "Força vs BTC obrigatória", "Até 10 altcoins com nota 60+ que superam o BTC em 30 e 90 dias, 10% cada; vagas vazias ficam em BTC.", REBALANCEAR_A_CADA, False),
+        ("nucleo", "Núcleo BTC + satélites", "50% sempre em BTC; o resto em até 5 altcoins do critério anterior (10% cada).", REBALANCEAR_A_CADA, False),
+        ("top_mensal", f"Top {TOP_N} mensal", f"As {TOP_N} de maior nota, trocadas a cada 4 semanas.", 4 * REBALANCEAR_A_CADA, False),
+    ]
     curvas, tabela = {}, []
-    for k, nome in estrategias.items():
-        c = simular(datas, S, notas, clima, mm50, inicio, k)
+    for k, nome, regra, periodo, saida in estrategias:
+        c = simular(datas, S, notas, clima, btc_info, mm50, inicio, k, periodo, saida)
         curvas[k] = c
-        tabela.append({"id": k, "nome": nome, **metricas(c, datas)})
+        tabela.append({"id": k, "nome": nome, "regra": regra, **metricas(c, datas)})
         print(f"  {nome}: {tabela[-1]['retorno_total']:.1f}%  queda máx {tabela[-1]['queda_maxima']:.1f}%")
 
     # Poder de previsão: retorno seguinte por faixa de nota
@@ -271,7 +299,8 @@ def main():
             if j >= len(datas):
                 continue
             b0, b1 = btc_all[i], btc_all[j]
-            for m, (_, _, classe) in ns.items():
+            for m, n in ns.items():
+                classe = n["classe"]
                 p0, p1 = S[m][i], S[m][j]
                 if p0 and p1:
                     r = (p1 / p0 - 1) * 100
