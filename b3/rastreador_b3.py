@@ -6,7 +6,8 @@ Rastreador B3 — fundamentos + análise técnica.
 2. Análise técnica (Yahoo Finance, preços ajustados por proventos): nota de 0 a 100
    pela mesma lógica do rastreador de criptos, com o Ibovespa no lugar do BTC.
 3. Sinal, pela nota de fundamentos (a regra que melhor funcionou no teste com balanços da CVM):
-     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica)
+     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica),
+              sem alerta de risco (volatilidade acima de 6% ao dia ou lucro atípico)
      Observar fundamentos 60+ fora das 10 maiores
      Neutra   fundamentos entre 40 e 59
      Evitar   fundamentos abaixo de 40
@@ -80,7 +81,7 @@ def limpo(v):
 # nome interno -> chave normalizada da coluna no Fundamentus
 COLUNAS = {
     "papel": "papel", "cotacao": "cotacao", "pl": "p/l", "pvp": "p/vp", "dy": "divyield",
-    "ev_ebit": "ev/ebit", "mrg_liq": "mrgliq", "roic": "roic", "roe": "roe",
+    "ev_ebit": "ev/ebit", "mrg_liq": "mrgliq", "mrg_ebit": "mrgebit", "roic": "roic", "roe": "roe",
     "liquidez": "liq2meses", "patrimonio": "patrimliq", "div_pat": "divliq/patrim",
     "cresc_rec_5a": "crescrec5a",
 }
@@ -321,10 +322,29 @@ def sinal_antigo(nf, nt):
     return "Neutra" if nf >= 40 else "Evitar"
 
 
-def aplicar_sinais(notas):
-    """notas = {papel: (nota_fund, nota_tec)} -> {papel: sinal}."""
+# Filtros de risco: ação com alerta não entra em Compra (vai para Observar, com o motivo)
+ATR_MAX_PCT = 6.0       # oscilação média diária acima disso = stop a mais de 12%
+PL_MIN = 3.0            # P/L abaixo disso costuma ser lucro que não se repete
+
+
+def alertas(f, atr_pct, financeira):
+    """Lista de alertas de risco da ação (vazia = sem alerta)."""
+    out = []
+    if atr_pct is not None and atr_pct > ATR_MAX_PCT:
+        out.append("volatil")
+    pl, ml, me = f.get("pl"), f.get("mrg_liq"), f.get("mrg_ebit")
+    atipico = pl is not None and 0 < pl < PL_MIN
+    if not financeira and ml is not None and me is not None and ml > 0 and ml > me:
+        atipico = True          # lucrou mais do que a operação gera: lucro veio de fora dela
+    if atipico:
+        out.append("lucro_atipico")
+    return out
+
+
+def aplicar_sinais(notas, bloqueadas=()):
+    """notas = {papel: (nota_fund, nota_tec)} -> {papel: sinal}. `bloqueadas` não entram em Compra."""
     ordem = sorted(notas.items(), key=lambda kv: (kv[1][0], kv[1][1]), reverse=True)
-    top = [p for p, (nf, _) in ordem if nf >= 60][:TOP_COMPRA]
+    top = [p for p, (nf, _) in ordem if nf >= 60 and p not in bloqueadas][:TOP_COMPRA]
     out = {}
     for p, (nf, _) in notas.items():
         out[p] = "Compra" if p in top else "Observar" if nf >= 60 else "Neutra" if nf >= 40 else "Evitar"
@@ -376,7 +396,10 @@ def main():
     if sum(1 for a in acoes if not a.get("sem_precos")) < len(acoes) // 2:
         raise SystemExit("Menos da metade das ações veio com preço — dados não salvos.")
 
-    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes})
+    for a in acoes:
+        a["alertas"] = alertas(a["fund"], a.get("atr_pct"), a["financeira"])
+    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes},
+                            bloqueadas={a["papel"] for a in acoes if a["alertas"]})
     for a in acoes:
         a["sinal"] = sinais[a["papel"]]
     ordem = {s: i for i, s in enumerate(SINAIS)}
@@ -388,6 +411,7 @@ def main():
         "fonte": "Fundamentus (fundamentos) + Yahoo Finance (preços ajustados por proventos)",
         "parametros": {"liquidez_minima": LIQUIDEZ_MINIMA, "max_acoes": MAX_ACOES,
                        "pesos_tec": PESOS_TEC, "mult_atr_stop": MULT_ATR_STOP, "risco_retorno": RISCO_RETORNO,
+                       "atr_max_pct": ATR_MAX_PCT, "pl_min": PL_MIN,
                        "criterios_fund": [{"id": k, "pontos": p, "texto": t, "bancos": b} for k, p, t, b in CRITERIOS_FUND]},
         "mercado": {k: limpo(v) if not isinstance(v, str) else v for k, v in clima(ibov).items()},
         "acoes": acoes,

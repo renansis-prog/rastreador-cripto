@@ -123,7 +123,7 @@ def indicadores(b, mc, financeira, dy):
     pl = b["pl"]
     luc, rec, ebit = b.get("lucro_ttm"), b.get("receita_ttm"), b.get("ebit_ttm")
     divida, caixa = n0(b.get("divida")), n0(b.get("caixa_total"))
-    f = {"pl": None, "pvp": None, "ev_ebit": None, "roe": None, "roic": None, "mrg_liq": None,
+    f = {"pl": None, "pvp": None, "ev_ebit": None, "roe": None, "roic": None, "mrg_liq": None, "mrg_ebit": None,
          "div_pat": None, "cresc_rec_5a": None, "dy": dy}
     if pl and pl > 0:
         f["pvp"] = mc / pl
@@ -141,6 +141,8 @@ def indicadores(b, mc, financeira, dy):
                 f["roic"] = ebit * 0.66 / cap * 100
         if rec and not math.isnan(rec) and rec > 0 and luc is not None and not math.isnan(luc):
             f["mrg_liq"] = luc / rec * 100
+            if ebit is not None and not math.isnan(ebit):
+                f["mrg_ebit"] = ebit / rec * 100
         if pl and pl > 0:
             f["div_pat"] = (divida - caixa) / pl
     r5 = b.get("receita_ttm_5a")
@@ -245,6 +247,11 @@ def escolher(modo, e, ibov_ok):
         return {"IBOV": 1.0}
     if modo == "todas":
         return {m: 1 / len(e) for m in e} if e else {}
+    if modo in ("filtro", "filtro_stops"):
+        # regra atual do painel: 10 maiores notas (60+) sem alerta de risco
+        top = sorted(((m, x) for m, x in e.items() if x["nf"] >= 60 and not x["alerta"]),
+                     key=lambda kv: (kv[1]["nf"], kv[1]["nt"]), reverse=True)[:TOP_N]
+        return {m: 1 / TOP_N for m, _ in top}
     if modo in ("fund_top10", "fund_top10_stops"):
         # mesma regra do sinal de Compra do painel: 10 maiores notas, só com nota 60+; vagas vazias no CDI
         top = sorted(((m, x) for m, x in e.items() if x["nf"] >= 60),
@@ -334,7 +341,9 @@ def main():
                                 "Low": P[papel]["low"][max(0, i - 60): i + 1],
                                 "Close": P[papel]["close"][max(0, i - 60): i + 1]}).dropna()
             nt = tec["nota_tec"]
-            ent[i][papel] = {"nf": nf, "nt": nt, "sinal": T.sinal_antigo(nf, nt), "atr": T.atr(hlc)}
+            atr_i = T.atr(hlc)
+            al = T.alertas(f, atr_i / c * 100 if atr_i else None, fin)
+            ent[i][papel] = {"nf": nf, "nt": nt, "sinal": T.sinal_antigo(nf, nt), "atr": atr_i, "alerta": bool(al)}
             if i == ultimo_reb:
                 conf.append({"papel": papel, "pl_calc": f["pl"], "pl_fundamentus": info[papel]["fund"].get("pl"),
                              "roe_calc": f["roe"], "roe_fundamentus": info[papel]["fund"].get("roe"),
@@ -346,8 +355,10 @@ def main():
         ("cdi", "CDI", "Renda fixa: 100% do CDI.", False),
         ("ibov", "Ibovespa (segurar)", "Compra o índice e não mexe.", False),
         ("todas", "Todas as ações (média)", "Pesos iguais em todas as ações do universo, todo mês. Mostra o efeito de usar só as ações que existem hoje.", False),
-        ("fund_top10", "Top 10 fundamentos (Compra atual)", "A regra atual do sinal de Compra: as 10 maiores notas de fundamentos (60+), 10% cada, revistas todo mês; vagas vazias no CDI.", False),
-        ("fund_top10_stops", "Top 10 fundamentos + stops", "A regra atual do painel com os stops: vende no stop loss (2 ATR abaixo da entrada) ou no stop gain (4 ATR acima), checado todo dia; o dinheiro espera no CDI até a próxima troca.", True),
+        ("filtro", "Compra atual (top 10 com filtros)", "A regra atual do painel: as 10 maiores notas de fundamentos (60+) sem alerta de risco (volatilidade acima de 6% ao dia ou lucro atípico), 10% cada, revistas todo mês; vagas vazias no CDI.", False),
+        ("filtro_stops", "Compra atual + stops", "A regra atual com stop loss (2 ATR abaixo da entrada) e stop gain (4 ATR acima), checados todo dia; o dinheiro espera no CDI até a próxima troca.", True),
+        ("fund_top10", "Top 10 fundamentos sem filtros", "As 10 maiores notas de fundamentos (60+), sem os filtros de risco.", False),
+        ("fund_top10_stops", "Top 10 sem filtros + stops", "Igual, com stop loss e stop gain.", True),
         ("sinal_compra", "Regra antiga (fund. 60+ e téc. 70+)", "Regra anterior do painel: fundamentos 60+ e técnica 70+, até 10 com 10% cada; vagas vazias no CDI.", False),
         ("sinal_compra_stops", "Regra antiga + stops", "Regra anterior com stop loss e stop gain.", True),
         ("fund_tendencia", "Fundamentos + Ibovespa em tendência", "Até 10 ações com fundamentos 60+, só quando o Ibovespa está acima da MM200; senão, CDI.", False),
@@ -358,7 +369,7 @@ def main():
         curvas[k] = c
         tabela.append({"id": k, "nome": nome, "regra": regra, **metricas(c)})
         print(f"  {nome}: {tabela[-1]['retorno_anual']:.1f}% a.a. · queda máx {tabela[-1]['queda_maxima']:.1f}%")
-        if k == "fund_top10_stops" and trades:
+        if k == "filtro_stops" and trades:
             def resumo(lst):
                 return {"n": len(lst), "ret_medio": statistics.mean(t["ret"] for t in lst)} if lst else {"n": 0, "ret_medio": None}
             stats = {m: resumo([t for t in trades if t["motivo"] == m]) for m in ("gain", "loss", "troca")}

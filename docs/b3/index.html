@@ -59,6 +59,7 @@ h1{margin:0;font-size:1.7rem;font-weight:800;letter-spacing:-.02em;text-wrap:bal
 .s-Observar{background:var(--obs-bg);color:var(--obs)}
 .s-Neutra{background:var(--neu-bg);color:var(--neu)}
 .s-Evitar{background:var(--baixa-bg);color:var(--baixa)}
+.tag.alerta{background:var(--baixa-bg);color:var(--baixa)}
 .tag{display:inline-block;font-size:.68rem;font-weight:600;padding:1px 7px;border-radius:99px;margin-left:4px;vertical-align:2px;background:var(--lat-bg);color:var(--lat)}
 svg.spark{width:110px;height:36px}
 .linha{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px;font:400 .8rem var(--f-num);font-variant-numeric:tabular-nums}
@@ -110,7 +111,8 @@ summary{cursor:pointer;font-weight:600}
     <ul id="lista-fund"></ul>
     <p>Bancos e seguradoras não têm EV/EBIT, ROIC, margem e dívida comparáveis; para eles a nota usa só os outros critérios. Empresa com prejuízo (P/L negativo) fica com no máximo 30.</p>
     <p><b>Técnica (0–100), só informativa</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
-    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos, desde que 60+ (desempate pela técnica) · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos, desde que 60+ e sem alerta de risco (desempate pela técnica) · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p><b>Filtros de risco</b>: não entram em Compra (ficam em Observar, com o aviso) as ações <span class="tag alerta">⚠ volátil</span>, que oscilam mais de 6% por dia em média, e as com <span class="tag alerta">⚠ lucro atípico</span>: P/L abaixo de 3, ou margem líquida maior que a margem operacional (o lucro veio de fora da operação, como venda de ativo ou crédito fiscal). A vaga passa para a próxima da fila.</p>
     <p>Por que só fundamentos? No <a href="fundamentos.html">teste com 9 anos de balanços da CVM</a>, as 10 maiores notas de fundamentos renderam bem mais que o CDI e o Ibovespa, e exigir nota técnica alta reduziu o retorno. A nota técnica fica como informação do momento da ação.</p>
     <p><b>Stop loss e stop gain</b>: calculados pela volatilidade da própria ação (ATR de 14 pregões, a variação média diária). O stop loss fica 2 ATRs abaixo da cotação; o stop gain fica no dobro dessa distância acima (risco e retorno de 2 para 1). Uma ação mais agitada ganha um stop mais largo, para não ser vendida por oscilação normal. São níveis de partida: recalcule com o preço em que você realmente comprar.</p>
     <p><b>Preço justo (Graham)</b>: raiz de 22,5 × lucro por ação × patrimônio por ação. É uma referência conservadora de valor; costuma subestimar empresas de crescimento (como WEG) e não se aplica a quem tem prejuízo. Não é um preço-alvo.</p>
@@ -120,7 +122,8 @@ summary{cursor:pointer;font-weight:600}
 <script>
 const $ = s => document.querySelector(s);
 const SINAIS = ["Compra","Observar","Neutra","Evitar"];
-const DESC = {Compra:"10 melhores fundamentos", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
+const ALERTA = {volatil:["volátil","Oscila mais de 6% por dia em média: o stop ficaria largo demais. Fora da Compra."], lucro_atipico:["lucro atípico","P/L abaixo de 3 ou lucro maior que o resultado da operação: pode ser lucro que não se repete. Fora da Compra."]};
+const DESC = {Compra:"10 melhores fundamentos, sem alertas", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
 const CRIT_TEC = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_1m:"1m +",alta_3m:"3m +",forte_vs_ibov:"> Ibov 1m"};
 let dados = [], sel = null, critFund = [];
 
@@ -151,7 +154,7 @@ function render(){
     const rsi = a.rsi14 > 70 ? `<span class="tag">RSI ${a.rsi14.toFixed(0)} · esticada</span>` : "";
     return `<div class="acao">
       <div class="notas"><div class="nota" style="background:${corNota(a.nota_fund)}"><b>${a.nota_fund}</b><span>Fund.</span></div><div class="nota" style="background:${corNota(a.nota_tec)}"><b>${Math.round(a.nota_tec)}</b><span>Téc.</span></div></div>
-      <div class="nome"><strong>${esc(a.papel)}</strong><span class="pill s-${a.sinal}">${a.sinal}</span>${a.financeira?'<span class="tag" style="background:var(--neu-bg);color:var(--neu)">financeira</span>':''}${rsi}
+      <div class="nome"><strong>${esc(a.papel)}</strong><span class="pill s-${a.sinal}">${a.sinal}</span>${a.financeira?'<span class="tag" style="background:var(--neu-bg);color:var(--neu)">financeira</span>':''}${(a.alertas||[]).map(x=>`<span class="tag alerta" title="${esc(ALERTA[x][1])}">⚠ ${ALERTA[x][0]}</span>`).join("")}${rsi}
         <div class="preco">${a.stop_loss == null ? `R$ ${reais(a.preco ?? f.cotacao)} · ` : ""}liquidez R$ ${mi(f.liquidez)}/dia${a.historico_curto?" · histórico curto":""}</div></div>
       ${spark(a.sparkline)}
       ${a.stop_loss != null ? `<div class="niveis">
