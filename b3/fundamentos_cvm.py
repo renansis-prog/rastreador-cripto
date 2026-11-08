@@ -71,9 +71,26 @@ def ler(z, padrao, colunas=None):
 
 
 # ---------------------------------------------------------------- tickers
-def mapa_cnpj(prefixos):
-    """{prefixo de 4 letras do ticker: CNPJ}, pelo FCA (cadastro de valores mobiliários)."""
+def mapa_cnpj(prefixos, todos_os_anos=False):
+    """{prefixo de 4 letras do ticker: CNPJ}, pelo FCA (cadastro de valores mobiliários).
+
+    Com todos_os_anos=True percorre os FCAs desde ANO_INICIAL (do mais novo para o mais antigo),
+    para achar também empresas que já saíram da bolsa."""
     ano = date.today().year
+    if todos_os_anos:
+        mapa = {}
+        for a in range(ano, ANO_INICIAL - 1, -1):
+            z = baixar_zip(f"{BASE}/FCA/DADOS/fca_cia_aberta_{a}.zip")
+            df = ler(z, r"valor_mobiliario") if z is not None else None
+            if df is None:
+                continue
+            c_cnpj = next(c for c in df.columns if "cnpj" in c.lower())
+            c_cod = next(c for c in df.columns if "codigo_negociacao" in c.lower())
+            for cnpj, cod in zip(df[c_cnpj], df[c_cod]):
+                if isinstance(cod, str) and len(cod) >= 4 and cod[:4] in prefixos:
+                    mapa.setdefault(cod[:4], cnpj)
+        print(f"FCA {ANO_INICIAL}-{ano}: {len(mapa)} de {len(prefixos)} empresas encontradas")
+        return mapa
     for a in (ano, ano - 1, ano - 2):
         z = baixar_zip(f"{BASE}/FCA/DADOS/fca_cia_aberta_{a}.zip")
         if z is None:
@@ -170,11 +187,14 @@ def normalizar_acoes(serie):
     return pd.Series(out, index=serie.index).ffill().bfill()
 
 
-def main():
-    painel = json.loads(PAINEL.read_text(encoding="utf-8"))
-    tickers = [a["papel"] for a in painel["acoes"]]
-    prefixos = {t[:4] for t in tickers}
-    mapa = mapa_cnpj(prefixos)
+def main(prefixos=None, saida=None, todos_os_anos=False):
+    """Sem argumentos: empresas do painel atual. O backtest histórico passa os prefixos de todas
+    as empresas que estiveram entre as mais negociadas em algum mês."""
+    if prefixos is None:
+        painel = json.loads(PAINEL.read_text(encoding="utf-8"))
+        prefixos = {a["papel"][:4] for a in painel["acoes"]}
+    saida = saida or SAIDA
+    mapa = mapa_cnpj(set(prefixos), todos_os_anos=todos_os_anos)
     cnpjs = set(mapa.values())
 
     trimestres, anuais, saldos, n_acoes = [], [], [], []
@@ -228,8 +248,9 @@ def main():
     tudo = fluxo.join(s, how="outer").join(n, how="left").reset_index()
     tudo["divida"] = tudo.get("emprest_cp", 0).fillna(0) + tudo.get("emprest_lp", 0).fillna(0)
     tudo["caixa_total"] = tudo.get("caixa", 0).fillna(0) + tudo.get("aplicacoes", 0).fillna(0)
-    inv = {v: k for k, v in mapa.items()}
-    tudo["empresa"] = tudo["CNPJ_CIA"].map(inv)
+    # um CNPJ pode ter mais de um prefixo (empresa que trocou de código): duplica as linhas
+    pares = pd.DataFrame(list(mapa.items()), columns=["empresa", "CNPJ_CIA"])
+    tudo = tudo.merge(pares, on="CNPJ_CIA", how="inner")
     tudo["data"] = pd.to_datetime(tudo["DT_REFER"])
     tudo["disponivel_em"] = tudo["data"] + pd.Timedelta(days=DIAS_DISPONIVEL)
     cols = ["empresa", "CNPJ_CIA", "data", "disponivel_em", "receita", "ebit", "lucro", "pl", "ativo",
@@ -239,12 +260,13 @@ def main():
             tudo[c] = float("nan")
     tudo = tudo[cols].sort_values(["empresa", "data"])
     tudo = tudo[tudo["data"].dt.month.isin([3, 6, 9, 12])]
+    tudo["acoes_bruto"] = tudo["acoes"]          # como veio da CVM (para preço × ações da época)
     tudo["acoes"] = tudo.groupby("empresa")["acoes"].transform(normalizar_acoes)
-    SAIDA.parent.mkdir(parents=True, exist_ok=True)
-    tudo.to_csv(SAIDA, index=False, date_format="%Y-%m-%d")
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    tudo.to_csv(saida, index=False, date_format="%Y-%m-%d")
     ok = tudo.dropna(subset=["lucro", "pl"])
     print(f"OK: {tudo['empresa'].nunique()} empresas, {len(tudo)} trimestres "
-          f"({len(ok)} com lucro e PL) em {SAIDA}")
+          f"({len(ok)} com lucro e PL) em {saida}")
     # amostra para conferência no log
     for emp in ("PETR", "ITUB", "WEGE", "MILS"):
         x = tudo[tudo["empresa"] == emp].tail(4)

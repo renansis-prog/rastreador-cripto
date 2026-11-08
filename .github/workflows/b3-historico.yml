@@ -1,0 +1,43 @@
+name: B3 - teste sem viés
+
+on:
+  schedule:
+    - cron: "41 7 4 * *"      # dia 4 de cada mês, 04:41 (Brasília)
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["b3/backtest_historico.py", ".github/workflows/b3-historico.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: b3-historico
+  cancel-in-progress: false
+
+jobs:
+  testar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r b3/requirements.txt
+      - name: Pegar dados mais recentes
+        run: git pull --ff-only origin main || true
+      - name: Rodar o teste sem viés de sobrevivência
+        run: python b3/backtest_historico.py
+        env:
+          PYTHONUNBUFFERED: "1"
+      - name: Salvar resultado
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add b3/dados/fundamentos_historico.csv docs/b3/backtest_hist.json 2>/dev/null || true
+          git add docs/b3/backtest_hist.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "B3: atualiza teste sem viés $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push

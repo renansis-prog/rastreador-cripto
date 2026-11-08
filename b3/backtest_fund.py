@@ -108,6 +108,8 @@ def preparar_fund():
         ok5 = (g["data"] - g["data"].shift(20)).dt.days.between(1780, 1870)
         g.loc[~ok5, "receita_ttm_5a"] = np.nan
         g["acoes"] = g["acoes"].replace(0, np.nan).ffill()
+        if "acoes_bruto" in g:
+            g["acoes_bruto"] = g["acoes_bruto"].replace(0, np.nan).ffill()
         por_emp[emp] = g
     return por_emp
 
