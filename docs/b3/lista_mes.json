@@ -1,0 +1,116 @@
+{
+ "mes": "2026-11",
+ "definida_em": "2026-11-06",
+ "acoes": [
+  {
+   "papel": "PRIO3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 95,
+   "preco_entrada": 60.47999954223633,
+   "stop_loss": 55.010722028507466,
+   "stop_gain": 71.41855456969405,
+   "stop_loss_pct": -9.043117650669597,
+   "stop_gain_pct": 18.086235301339194,
+   "posicao_pct": 11.058133252595194
+  },
+  {
+   "papel": "MULT3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 27.209999084472656,
+   "stop_loss": 24.776142669691318,
+   "stop_gain": 32.07771191403533,
+   "stop_loss_pct": -8.944713328455112,
+   "stop_gain_pct": 17.889426656910224,
+   "posicao_pct": 11.179788141658815
+  },
+  {
+   "papel": "TEND3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 16.920000076293945,
+   "stop_loss": 13.38799728565289,
+   "stop_gain": 23.984005657576056,
+   "stop_loss_pct": -20.87472089075004,
+   "stop_gain_pct": 41.74944178150008,
+   "posicao_pct": 4.790483212846778
+  },
+  {
+   "papel": "VIVA3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 95,
+   "preco_entrada": 17.90999984741211,
+   "stop_loss": 15.558484196644656,
+   "stop_gain": 22.613031148947016,
+   "stop_loss_pct": -13.129624069244382,
+   "stop_gain_pct": 26.259248138488765,
+   "posicao_pct": 7.616364297455096
+  },
+  {
+   "papel": "POMO4",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 3.680000066757202,
+   "stop_loss": 3.276400647179406,
+   "stop_gain": 4.487198905912795,
+   "stop_loss_pct": -10.967375333051177,
+   "stop_gain_pct": 21.934750666102353,
+   "posicao_pct": 9.117951831067636
+  },
+  {
+   "papel": "JHSF3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 10.0,
+   "stop_loss": 8.649445697641024,
+   "stop_gain": 12.701108604717952,
+   "stop_loss_pct": -13.50554302358976,
+   "stop_gain_pct": 27.01108604717952,
+   "posicao_pct": 7.404367216137311
+  },
+  {
+   "papel": "MDNE3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 18.049999237060547,
+   "stop_loss": 14.916869169926384,
+   "stop_gain": 24.316259371328872,
+   "stop_loss_pct": -17.358062047455213,
+   "stop_gain_pct": 34.71612409491043,
+   "posicao_pct": 5.761011783839115
+  },
+  {
+   "papel": "VULC3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 12.229999542236328,
+   "stop_loss": 11.066562877002173,
+   "stop_gain": 14.556872872704638,
+   "stop_loss_pct": -9.512973906631995,
+   "stop_gain_pct": 19.02594781326399,
+   "posicao_pct": 10.511959875164246
+  },
+  {
+   "papel": "MILS3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 100,
+   "preco_entrada": 16.100000381469727,
+   "stop_loss": 15.679307568612632,
+   "stop_gain": 16.941386007183915,
+   "stop_loss_pct": -2.612998775709907,
+   "stop_gain_pct": 5.225997551419814,
+   "posicao_pct": 15.0
+  },
+  {
+   "papel": "VTRU3",
+   "definida_em": "2026-11-06",
+   "nota_fund": 95,
+   "preco_entrada": 12.84000015258789,
+   "stop_loss": 11.114331283843793,
+   "stop_gain": 16.291337890076086,
+   "stop_loss_pct": -13.439788537668285,
+   "stop_gain_pct": 26.87957707533657,
+   "posicao_pct": 7.440593259315473
+  }
+ ]
+}
