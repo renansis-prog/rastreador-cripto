@@ -132,7 +132,8 @@ def coletar_fundamentus() -> pd.DataFrame:
 
 
 def universo(fund: pd.DataFrame) -> pd.DataFrame:
-    df = fund[(fund["liquidez"] >= LIQUIDEZ_MINIMA) & (fund["cotacao"] > 0)].copy()
+    # ações abaixo de R$ 1 ficam de fora (mesma regra do teste sem viés)
+    df = fund[(fund["liquidez"] >= LIQUIDEZ_MINIMA) & (fund["cotacao"] >= 1.0)].copy()
     # uma ação por empresa (PETR3 e PETR4 contam como a mesma): fica a mais líquida
     df["empresa"] = df["papel"].str[:4]
     df = df.sort_values("liquidez", ascending=False).drop_duplicates("empresa")

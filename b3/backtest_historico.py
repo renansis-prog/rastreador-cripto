@@ -50,6 +50,7 @@ URLS_COTAHIST = [
 ]
 UNIVERSO_N = 120
 LIQ_MIN = 5_000_000
+PRECO_MIN = 1.0                  # ações de centavos ficam de fora (variações extremas e distorcidas)
 JANELA_LIQ = 42                  # pregões para medir o volume médio
 MES = 21
 AQUECIMENTO = 260
@@ -89,6 +90,8 @@ def ler_cotahist(texto):
         cod = ln[12:24].strip()
         if not re.fullmatch(r"[A-Z0-9]{4}(3|4|5|6|7|8|11)", cod):
             continue
+        if ln[39:49].strip().upper().startswith("CI"):      # cotas de fundos (ETFs como BOVA11)
+            continue
         fat = int(ln[210:217] or 1) or 1
         p = lambda a, b: int(ln[a:b]) / 100 / fat  # noqa: E731
         reg.append((ln[2:10], cod, p(56, 69), p(69, 82), p(82, 95), p(108, 121), int(ln[170:188]) / 100))
@@ -114,16 +117,47 @@ def carregar_cotahist():
 
 
 # ---------------------------------------------------------------- desdobramentos
-FATORES = [2, 3, 4, 5, 8, 10, 20, 25, 50, 100, 1000]
+FATORES = [2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 200, 500, 1000]
 
 
 def fator_evento(r):
-    """Se a variação de um dia parece desdobramento/grupamento, devolve o fator; senão 1."""
+    """Se a variação de um dia parece desdobramento/grupamento, devolve o fator; senão 1.
+    Fatores pequenos (2 a 6) exigem proporção quase exata, para não confundir com um dia real
+    de +100% ou −50% em ações muito agitadas."""
     for f in FATORES:
+        tol = 0.03 if f <= 6 else 0.12
         for alvo in (1 / f, float(f)):
-            if abs(math.log(r / alvo)) < 0.08:
+            if abs(math.log(r / alvo)) < tol:
                 return alvo
     return 1.0
+
+
+def fatores_split(raw, eventos_yahoo):
+    """Fator acumulado (para trás) que põe o preço bruto da B3 na base de hoje.
+
+    Usa os desdobramentos/grupamentos registrados no Yahoo; nos dias sem registro, um salto que
+    bate com uma proporção típica conta como evento não registrado."""
+    n = len(raw)
+    fat = np.ones(n)
+    acum = 1.0
+    perto = set()
+    for i in eventos_yahoo:
+        perto.update(range(i - 3, i + 4))
+    for i in range(n - 1, 0, -1):
+        fat[i] = acum
+        if i in eventos_yahoo:
+            acum *= eventos_yahoo[i]          # Yahoo: 2.0 = desdobramento 1:2; 0.01 = grupamento 100:1
+            continue
+        a, b = raw[i - 1], raw[i]
+        if i in perto or not (a and b) or a != a or b != b:
+            continue
+        r = b / a
+        if abs(math.log(r)) > math.log(1.45):
+            ev = fator_evento(r)
+            if ev != 1.0:
+                acum /= ev
+    fat[0] = acum
+    return fat
 
 
 def ajustar_desdobramentos(close, adj_ref=None):
@@ -173,9 +207,10 @@ def baixar_yahoo(tickers):
         for s in simbolos:
             try:
                 x = df[s] if isinstance(df.columns, pd.MultiIndex) and s in df.columns.get_level_values(0) else df
-                if "Dividends" not in x:
-                    x = x.assign(Dividends=0.0)
-                x = x[["Close", "Adj Close", "Dividends"]].dropna(subset=["Close"])
+                for col in ("Dividends", "Stock Splits"):
+                    if col not in x:
+                        x = x.assign(**{col: 0.0})
+                x = x[["Close", "Adj Close", "Dividends", "Stock Splits"]].dropna(subset=["Close"])
             except KeyError:
                 continue
             if len(x) >= 60:
@@ -210,12 +245,15 @@ def main():
     # volume médio móvel por ação -> universo de cada mês (uma ação por empresa)
     vol = cot.pivot_table(index="i", columns="papel", values="volume", aggfunc="sum").reindex(range(n)).fillna(0)
     liq = vol.rolling(JANELA_LIQ, min_periods=20).mean()
+    px = cot.pivot_table(index="i", columns="papel", values="close", aggfunc="last").reindex(range(n)).ffill()
     inicio = AQUECIMENTO
     rebal = list(range(inicio, n, MES))
     universo = {}
     for i in rebal:
         linha = liq.iloc[i - 1].dropna()
-        linha = linha[linha >= LIQ_MIN].sort_values(ascending=False)
+        linha = linha[linha >= LIQ_MIN]
+        preco_dia = px.iloc[i - 1]
+        linha = linha[[preco_dia.get(p_, 0) >= PRECO_MIN for p_ in linha.index]].sort_values(ascending=False)
         escolhidos, empresas = [], set()
         for papel in linha.index:
             if papel[:4] in empresas:
@@ -249,42 +287,44 @@ def main():
         return g[col].reindex(range(n)).astype(float).tolist()
 
     P, sem_yahoo = {}, 0
-    for p in todos:
+    pos = {d: i for i, d in enumerate(datas)}
+
+    def montar(g, y):
+        """Preços na base de hoje (desdobramentos) e série de retorno total (com dividendos do Yahoo)."""
+        raw = serie(g, "close")
+        eventos, divs = {}, [0.0] * n
+        if y is not None:
+            for d, sp, dv in zip(y.index, y["Stock Splits"], y["Dividends"]):
+                k = pos.get(d.strftime("%Y-%m-%d"))
+                if k is None:
+                    continue
+                if sp and sp == sp and sp > 0 and sp != 1:
+                    eventos[k] = float(sp)
+                if dv and dv == dv and dv > 0:
+                    divs[k] = float(dv)
+        fat = fatores_split(raw, eventos)
+        aj = lambda xs: [x / f if x == x else x for x, f in zip(xs, fat)]  # noqa: E731
+        close = aj(raw)
+        # retorno total: reinveste o dividendo na data ex (limita a 30% do preço, contra dado errado)
+        tr, acum, ult = [], 1.0, None
+        for k in range(n):
+            c = close[k]
+            if c == c and ult is not None and divs[k] > 0:
+                acum *= 1 + min(divs[k] / ult, 0.30)
+            tr.append(c * acum if c == c else float("nan"))
+            if c == c:
+                ult = c
+        return {"raw": raw, "close": close, "open": aj(serie(g, "open")), "high": aj(serie(g, "high")),
+                "low": aj(serie(g, "low")), "adj": tr, "div": divs}
+
+    for p in set(todos) | {x for x in brutos if x[:4] in {t[:4] for t in todos}}:
         g = brutos.get(p)
         if g is None:
             continue
-        raw = serie(g, "close")
         y = yh.get(p)
-        adj_ref = None
-        if y is not None:
-            yd = {d.strftime("%Y-%m-%d"): (c, a, dv) for d, c, a, dv in zip(y.index, y["Close"], y["Adj Close"], y["Dividends"])}
-            adj_ref = [yd.get(d, (None, None, None))[1] for d in datas]
-            adj_ref = [float("nan") if v is None else v for v in adj_ref]
-        else:
+        if y is None and p in todos:
             sem_yahoo += 1
-        fat = ajustar_desdobramentos(raw, adj_ref)
-        P[p] = {
-            "raw": raw,
-            "close": [c / f if c == c else c for c, f in zip(raw, fat)],
-            "open": [c / f if c == c else c for c, f in zip(serie(g, "open"), fat)],
-            "high": [c / f if c == c else c for c, f in zip(serie(g, "high"), fat)],
-            "low": [c / f if c == c else c for c, f in zip(serie(g, "low"), fat)],
-        }
-        if adj_ref is not None and sum(1 for v in adj_ref if v == v) > 0.8 * sum(1 for v in raw if v == v):
-            # retorno total pelo Yahoo nos dias em que ele tem dado; buracos herdam a variação da B3
-            adj, ult_a, ult_c = [], None, None
-            for a, c in zip(adj_ref, P[p]["close"]):
-                if a == a:
-                    adj.append(a); ult_a, ult_c = a, c
-                elif c == c and ult_a is not None:
-                    adj.append(ult_a * c / ult_c)
-                else:
-                    adj.append(float("nan"))
-            P[p]["adj"] = adj
-            P[p]["div"] = [yd.get(d, (0, 0, 0))[2] or 0.0 for d in datas]
-        else:
-            P[p]["adj"] = P[p]["close"]
-            P[p]["div"] = [0.0] * n
+        P[p] = montar(g, y)
     ib = yh["IBOV"]
     ibd = {d.strftime("%Y-%m-%d"): a for d, a in zip(ib.index, ib["Adj Close"])}
     ib_adj, ult = [], None
@@ -301,14 +341,14 @@ def main():
             v *= 1 + cdi[d] / 100
         cdi_idx.append(v)
 
-    # preço bruto de uma ação ON/PN da mesma empresa (para valor de mercado de units)
+    # preço (base de hoje) de uma ação ON/PN da mesma empresa, para o valor de mercado de units
     def preco_valor(papel, i):
         if not papel.endswith("11"):
-            return P[papel]["raw"][i]
+            return P[papel]["close"][i]
         for suf in ("3", "4", "5", "6"):
-            g = brutos.get(papel[:4] + suf)
-            if g is not None and i in g.index:
-                return float(g.at[i, "close"])
+            q = P.get(papel[:4] + suf)
+            if q is not None and q["close"][i] == q["close"][i]:
+                return q["close"][i]
         return None
 
     ent, ibov_ok, n_aval = {}, {}, []
@@ -329,7 +369,7 @@ def main():
             if g is None or not c or c != c:
                 continue
             b = BF.ultimo_balanco(g, datas[i])
-            if b is None or BF.vazio(b.get("acoes_bruto")) or not b.get("acoes_bruto"):
+            if b is None or BF.vazio(b.get("acoes")) or not b.get("acoes"):
                 continue
             pv = preco_valor(papel, i)
             if not pv or pv != pv:
@@ -337,7 +377,9 @@ def main():
             # escala do número de ações (milhares x unidades): a que deixa o P/VP mais perto de 1
             if not b["pl"] or b["pl"] <= 0:
                 continue
-            mc = min((pv * b["acoes_bruto"] * 1000.0 ** k for k in (-1, 0, 1)),
+            # preço e número de ações na mesma base (de hoje); a escala milhares/unidades da CVM
+            # é escolhida pelo P/VP mais plausível
+            mc = min((pv * b["acoes"] * 1000.0 ** k for k in (-1, 0, 1)),
                      key=lambda m: abs(math.log10(m / b["pl"])))
             divs = sum(P[papel]["div"][max(0, i - 251): i + 1])
             dy = divs / c * 100 if c else 0
