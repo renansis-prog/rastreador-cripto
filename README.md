@@ -59,7 +59,7 @@ Mesmo princípio, para ações da B3, juntando **fundamentos** (Fundamentus) e *
 - Backtest: `https://renansis-prog.github.io/rastreador-cripto/b3/backtest.html`
 - Atualiza nos dias úteis às 19:37 (Brasília); backtest no dia 2 de cada mês. Não precisa de chave.
 
-**Sinal:** Compra (as 10 maiores notas de fundamentos, desde que 60+; avisos de volatilidade e lucro atípico aparecem mas não excluem — filtrá-los piorou o teste; o painel sugere o tamanho da posição para arriscar 1% da carteira até o stop) · Observar (fundamentos 60+ fora do top 10) ·
+**Sinal:** Compra (as 10 maiores notas de fundamentos, desde que 60+, escolhidas no 1º pregão do mês e fixas até o mês seguinte, com stops fixos — `docs/b3/lista_mes.json`, histórico em `docs/b3/historico_listas.json`; avisos de volatilidade e lucro atípico aparecem mas não excluem — filtrá-los piorou o teste; o painel sugere o tamanho da posição para arriscar 1% da carteira até o stop) · Observar (fundamentos 60+ fora do top 10) ·
 Neutra (fundamentos 40–59) · Evitar (fundamentos < 40). A nota técnica é só informativa: nos testes ela não previu retorno.
 Cada ação mostra stop loss (2 ATR abaixo) e stop gain (4 ATR acima) e o preço justo de Graham.
 

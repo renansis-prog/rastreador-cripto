@@ -6,7 +6,9 @@ Rastreador B3 — fundamentos + análise técnica.
 2. Análise técnica (Yahoo Finance, preços ajustados por proventos): nota de 0 a 100
    pela mesma lógica do rastreador de criptos, com o Ibovespa no lugar do BTC.
 3. Sinal, pela nota de fundamentos (a regra que melhor funcionou no teste com balanços da CVM):
-     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica)
+     Compra   as 10 maiores notas de fundamentos, desde que 60+ (desempate pela nota técnica),
+              definidas no 1º pregão de cada mês e fixas até o mês seguinte (docs/b3/lista_mes.json),
+              com stops fixos calculados naquele dia
    Alertas de risco (volatilidade alta, lucro atípico) aparecem como aviso, sem tirar da Compra:
    no teste, filtrá-los derrubou o retorno sem reduzir a queda máxima. O risco é controlado pelo
    tamanho da posição (1% da carteira em risco até o stop) e pelos stops.
@@ -32,6 +34,8 @@ import requests
 
 RAIZ = Path(__file__).resolve().parent.parent
 SAIDA = RAIZ / "docs" / "b3" / "data.json"
+LISTA_MES = RAIZ / "docs" / "b3" / "lista_mes.json"            # lista de Compra congelada do mês
+HISTORICO_LISTAS = RAIZ / "docs" / "b3" / "historico_listas.json"
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) rastreador-b3/1.0"}
 FUNDAMENTUS_URL = "https://www.fundamentus.com.br/resultado.php"
@@ -185,13 +189,17 @@ def nota_fundamental(f: dict):
 
 # ---------------------------------------------------------------- preços e técnica
 def baixar_precos(tickers, periodo="15mo", ohlc=None):
-    """Fechamentos ajustados por ação. Se `ohlc` for um dict, guarda nele máxima/mínima/fechamento (para o ATR)."""
+    """Fechamentos ajustados por proventos (para a análise técnica).
+
+    Se `ohlc` for um dict, guarda nele máxima/mínima/fechamento SEM ajuste de proventos
+    (preço real do pregão), usados no ATR e no acompanhamento dos stops: com preços ajustados,
+    um dividendo futuro rebaixaria os preços passados e poderia "acionar" um stop que não aconteceu."""
     import yfinance as yf
     simbolos = [t + ".SA" for t in tickers] + [INDICE]
     df = None
     for tentativa in range(3):
         try:
-            df = yf.download(simbolos, period=periodo, interval="1d", auto_adjust=True,
+            df = yf.download(simbolos, period=periodo, interval="1d", auto_adjust=False,
                              group_by="ticker", threads=True, progress=False)
             if df is not None and not df.empty:
                 break
@@ -203,7 +211,7 @@ def baixar_precos(tickers, periodo="15mo", ohlc=None):
     out = {}
     for s in simbolos:
         try:
-            serie = df[s]["Close"].dropna()
+            serie = df[s]["Adj Close"].dropna()
         except KeyError:
             continue
         if len(serie) >= 60:
@@ -368,10 +376,63 @@ def clima(ibov):
             "ibov_ret_1m": retorno(ibov, P_MES), "ibov_ret_3m": retorno(ibov, P_TRIM)}
 
 
+# ---------------------------------------------------------------- lista do mês
+def ler_json(caminho, padrao=None):
+    try:
+        return json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return padrao
+
+
+def acompanhar(item, hlc):
+    """Status de uma ação da lista desde o dia em que a lista foi definida: stop atingido ou ativa."""
+    out = {"status": "ativa", "data_status": None, "preco_atual": None, "ret_desde_entrada": None}
+    if hlc is None or hlc.empty:
+        return out
+    depois = hlc[hlc.index.strftime("%Y-%m-%d") > item["definida_em"]]
+    ultimo = float(hlc["Close"].iloc[-1])
+    out["preco_atual"] = ultimo
+    for d, r in depois.iterrows():
+        if r["Low"] <= item["stop_loss"]:            # se tocou os dois no mesmo dia, assume o pior
+            out.update(status="stop_loss", data_status=d.strftime("%Y-%m-%d"))
+            break
+        if r["High"] >= item["stop_gain"]:
+            out.update(status="stop_gain", data_status=d.strftime("%Y-%m-%d"))
+            break
+    saida = {"stop_loss": item["stop_loss"], "stop_gain": item["stop_gain"]}.get(out["status"], ultimo)
+    out["ret_desde_entrada"] = (saida / item["preco_entrada"] - 1) * 100
+    return out
+
+
+def preco_real(hlc, tec):
+    """Fechamento real do último pregão (sem ajuste de proventos)."""
+    if hlc is not None and not hlc.empty:
+        return float(hlc["Close"].iloc[-1])
+    return tec["preco"] if tec else None
+
+
+def nova_lista(mes, pregao, acoes):
+    itens = []
+    for a in acoes:
+        if a["sinal"] != "Compra" or a.get("stop_loss") is None:
+            continue
+        itens.append({"papel": a["papel"], "definida_em": pregao, "nota_fund": a["nota_fund"],
+                      "preco_entrada": a["preco"], "stop_loss": a["stop_loss"], "stop_gain": a["stop_gain"],
+                      "stop_loss_pct": a["stop_loss_pct"], "stop_gain_pct": a["stop_gain_pct"],
+                      "posicao_pct": a.get("posicao_pct")})
+    return {"mes": mes, "definida_em": pregao, "acoes": itens}
+
+
 # ---------------------------------------------------------------- execução
 def main():
     fund = coletar_fundamentus()
     uni = universo(fund)
+    lista = ler_json(LISTA_MES)
+    if lista:   # ações da lista do mês continuam acompanhadas mesmo se saírem do universo
+        faltam = [x["papel"] for x in lista["acoes"] if x["papel"] not in set(uni["papel"])]
+        extra = fund[fund["papel"].isin(faltam)]
+        if len(extra):
+            uni = pd.concat([uni, extra.assign(empresa=extra["papel"].str[:4])], ignore_index=True)
     print(f"Fundamentus: {len(fund)} ações · {len(uni)} no universo (liquidez ≥ R$ {LIQUIDEZ_MINIMA/1e6:.0f} mi/dia)")
 
     hlc = {}
@@ -395,25 +456,55 @@ def main():
             "nota_fund": nf, "criterios_fund": crit_f,
             **({k: limpo(v) if not isinstance(v, dict) else v for k, v in tec.items()} if tec else {"nota_tec": 0, "sem_precos": True}),
             "sparkline": [round(float(x), 2) for x in serie.tolist()[-120:]] if serie is not None else [],
-            **{k: limpo(v) for k, v in niveis(tec["preco"] if tec else None, atr(hlc.get(row["papel"])), f).items()},
+            **{k: limpo(v) for k, v in niveis(preco_real(hlc.get(row["papel"]), tec), atr(hlc.get(row["papel"])), f).items()},
             "sinal": None,
             "nota_final": round((nf + nt) / 2),
         })
 
+    for a in acoes:
+        p = preco_real(hlc.get(a["papel"]), None)
+        if p:
+            a["preco"] = p
     if sum(1 for a in acoes if not a.get("sem_precos")) < len(acoes) // 2:
         raise SystemExit("Menos da metade das ações veio com preço — dados não salvos.")
 
     for a in acoes:
         a["alertas"] = alertas(a["fund"], a.get("atr_pct"), a["financeira"])
-    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes})
+    no_universo = set(universo(fund)["papel"])
+    sinais = aplicar_sinais({a["papel"]: (a["nota_fund"], a["nota_tec"]) for a in acoes if a["papel"] in no_universo})
     for a in acoes:
-        a["sinal"] = sinais[a["papel"]]
+        a["sinal"] = sinais.get(a["papel"], "Neutra" if a["nota_fund"] >= 40 else "Evitar")
+
+    # ---- lista do mês: definida no 1º pregão do mês e fixa até o mês seguinte (como no teste)
+    pregao = precos[INDICE].index[-1].strftime("%Y-%m-%d")
+    mes = pregao[:7]
+    if not lista or lista.get("mes") != mes:
+        if lista:   # fecha a lista do mês anterior no histórico, com o resultado final de cada ação
+            for x in lista["acoes"]:
+                x.update(acompanhar(x, hlc.get(x["papel"])))
+            hist = ler_json(HISTORICO_LISTAS, [])
+            hist.append(lista)
+            HISTORICO_LISTAS.write_text(json.dumps(hist, ensure_ascii=False, indent=1), encoding="utf-8")
+        lista = nova_lista(mes, pregao, acoes)
+        LISTA_MES.write_text(json.dumps(lista, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"Nova lista do mês {mes}: {[x['papel'] for x in lista['acoes']]}")
+    na_lista = {x["papel"]: x for x in lista["acoes"]}
+    for x in lista["acoes"]:
+        x.update(acompanhar(x, hlc.get(x["papel"])))
+    for a in acoes:
+        top_hoje = a["sinal"] == "Compra"
+        a["top10_hoje"] = top_hoje
+        if a["papel"] in na_lista:
+            a["sinal"] = "Compra"
+            a["lista"] = na_lista[a["papel"]]
+        elif top_hoje:
+            a["sinal"] = "Observar"      # entrou no top 10 depois do 1º pregão: espera a próxima lista
     ordem = {s: i for i, s in enumerate(SINAIS)}
     acoes.sort(key=lambda a: (ordem[a["sinal"]], -a["nota_fund"], -a["nota_tec"]))
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
     SAIDA.write_text(json.dumps({
         "atualizado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "pregao": precos[INDICE].index[-1].strftime("%Y-%m-%d"),
+        "pregao": pregao,
         "fonte": "Fundamentus (fundamentos) + Yahoo Finance (preços ajustados por proventos)",
         "parametros": {"liquidez_minima": LIQUIDEZ_MINIMA, "max_acoes": MAX_ACOES,
                        "pesos_tec": PESOS_TEC, "mult_atr_stop": MULT_ATR_STOP, "risco_retorno": RISCO_RETORNO,
@@ -421,6 +512,7 @@ def main():
                        "risco_por_acao": RISCO_POR_ACAO, "posicao_max": POSICAO_MAX,
                        "criterios_fund": [{"id": k, "pontos": p, "texto": t, "bancos": b} for k, p, t, b in CRITERIOS_FUND]},
         "mercado": {k: limpo(v) if not isinstance(v, str) else v for k, v in clima(ibov).items()},
+        "lista_mes": lista,
         "acoes": acoes,
     }, ensure_ascii=False), encoding="utf-8")
     contagem = {s: sum(1 for a in acoes if a["sinal"] == s) for s in SINAIS}

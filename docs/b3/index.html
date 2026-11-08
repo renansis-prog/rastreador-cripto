@@ -36,6 +36,18 @@ h1{margin:0;font-size:1.7rem;font-weight:800;letter-spacing:-.02em;text-wrap:bal
 .clima.baixa{border-color:var(--baixa);background:var(--baixa-bg)}
 .clima.transicao{border-color:var(--lat);background:var(--lat-bg)}
 .aviso{background:var(--lat-bg);border:1px solid var(--lat);border-radius:10px;padding:10px 12px;font-size:.88rem}
+.lista-mes{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.lista-mes h2{margin:0 0 2px;font-size:1.1rem;font-weight:800}
+.lista-mes .sub{margin-bottom:10px}
+.tabela{overflow-x:auto}
+.lista-mes table{border-collapse:collapse;width:100%;font-size:.84rem}
+.lista-mes th,.lista-mes td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.lista-mes th:first-child,.lista-mes td:first-child{text-align:left}
+.lista-mes th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.lista-mes td{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.lista-mes td:first-child{font-family:var(--f-body);font-weight:700}
+.st{display:inline-block;font-family:var(--f-body);font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:99px}
+.st-ativa{background:var(--obs-bg);color:var(--obs)} .st-stop_gain{background:var(--alta-bg);color:var(--alta)} .st-stop_loss{background:var(--baixa-bg);color:var(--baixa)}
 .faixas{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .faixa{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px;cursor:pointer;text-align:left;color:var(--fg);font:inherit}
 .faixa[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
@@ -90,6 +102,7 @@ summary{cursor:pointer;font-weight:600}
     <div class="links"><a href="fundamentos.html">Teste do sinal de Compra →</a><a href="backtest.html">Teste da análise técnica</a><a href="../">Rastreador de criptos</a></div>
   </header>
   <div class="clima" id="clima" hidden></div>
+  <section class="lista-mes" id="lista-mes" hidden></section>
   <div class="faixas" id="faixas"></div>
   <div class="filtros">
     <input id="busca" type="search" placeholder="Buscar ação (ex: PETR)" aria-label="Buscar ação">
@@ -111,7 +124,7 @@ summary{cursor:pointer;font-weight:600}
     <ul id="lista-fund"></ul>
     <p>Bancos e seguradoras não têm EV/EBIT, ROIC, margem e dívida comparáveis; para eles a nota usa só os outros critérios. Empresa com prejuízo (P/L negativo) fica com no máximo 30.</p>
     <p><b>Técnica (0–100), só informativa</b>, com preços ajustados por proventos: preço acima das médias de 20, 50 e 200 pregões, MM50 acima da MM200, MM50 subindo, alta em 1 e 3 meses e alta maior que a do Ibovespa no último mês. Mesma lógica do rastreador de criptos.</p>
-    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos, desde que 60+ (desempate pela técnica) · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
+    <p><b>Sinal</b>: <span class="pill s-Compra">Compra</span> as 10 maiores notas de fundamentos (60+, desempate pela técnica), escolhidas no fechamento do 1º pregão de cada mês e fixas até o mês seguinte · <span class="pill s-Observar">Observar</span> fundamentos 60+ fora das 10 maiores · <span class="pill s-Neutra">Neutra</span> fundamentos 40 a 59 · <span class="pill s-Evitar">Evitar</span> fundamentos abaixo de 40.</p>
     <p><b>Avisos de risco</b>: <span class="tag alerta">⚠ volátil</span> marca ações que oscilam mais de 6% por dia em média; <span class="tag alerta">⚠ lucro atípico</span> marca P/L abaixo de 3 ou margem líquida maior que a operacional (o lucro pode ter vindo de fora da operação, como venda de ativo ou crédito fiscal; vale conferir o balanço). Os avisos não tiram a ação da Compra: no teste, excluir essas ações derrubou o retorno de cerca de 18% para 11% ao ano sem reduzir a queda máxima.</p>
     <p><b>Tamanho sugerido</b>: a fatia da carteira para perder no máximo 1% do total se o stop loss for atingido (1% ÷ distância até o stop), limitada a 15%. Ações agitadas, com stop mais distante, entram com uma fatia menor; o que sobra pode ficar no CDI. Se você aceita arriscar 2% por ação, dobre os valores (respeitando o limite).</p>
     <p>Por que só fundamentos? No <a href="fundamentos.html">teste com 9 anos de balanços da CVM</a>, as 10 maiores notas de fundamentos renderam bem mais que o CDI e o Ibovespa, e exigir nota técnica alta reduziu o retorno. A nota técnica fica como informação do momento da ação.</p>
@@ -124,10 +137,33 @@ summary{cursor:pointer;font-weight:600}
 const $ = s => document.querySelector(s);
 const SINAIS = ["Compra","Observar","Neutra","Evitar"];
 const ALERTA = {volatil:["volátil","Oscila mais de 6% por dia em média: stop largo, por isso o tamanho sugerido é menor."], lucro_atipico:["lucro atípico","P/L abaixo de 3 ou lucro maior que o resultado da operação: confira no balanço se o lucro se repete."]};
-const DESC = {Compra:"10 melhores fundamentos", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
+const DESC = {Compra:"lista do mês", Observar:"bons fundamentos, fora do top 10", Neutra:"fundamentos medianos", Evitar:"fundamentos fracos"};
 const CRIT_TEC = {acima_mm20:"> MM20",acima_mm50:"> MM50",acima_mm200:"> MM200",mm50_acima_mm200:"MM50 > MM200",mm50_subindo:"MM50 subindo",alta_1m:"1m +",alta_3m:"3m +",forte_vs_ibov:"> Ibov 1m"};
 let dados = [], sel = null, critFund = [];
 
+const dataBR = s => s ? s.split("-").reverse().join("/") : "—";
+const MESES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+function status(x){
+  if (x.status === "stop_gain") return `<span class="st st-stop_gain">stop gain ${dataBR(x.data_status).slice(0,5)}</span>`;
+  if (x.status === "stop_loss") return `<span class="st st-stop_loss">stop loss ${dataBR(x.data_status).slice(0,5)}</span>`;
+  return `<span class="st st-ativa">ativa</span>`;
+}
+function listaMes(j){
+  const L = j.lista_mes; if (!L || !L.acoes || !L.acoes.length) return;
+  const [ano, m] = L.mes.split("-");
+  const topHoje = new Set(dados.filter(a=>a.top10_hoje).map(a=>a.papel));
+  const novas = dados.filter(a=>a.top10_hoje && !a.lista).map(a=>a.papel);
+  const el = $("#lista-mes"); el.hidden = false;
+  el.innerHTML = `<h2>Lista de Compra de ${MESES[+m-1]}</h2>
+    <div class="sub">Definida no fechamento de ${dataBR(L.definida_em)} e fixa até o 1º pregão do mês seguinte, como no teste. Os stops também ficam fixos. Quando um stop é atingido, a regra é vender e esperar a próxima lista.</div>
+    <div class="tabela"><table>
+      <thead><tr><th>Ação</th><th>Entrada</th><th>Stop loss</th><th>Stop gain</th><th>Tamanho</th><th>Hoje</th><th>Resultado</th><th>Situação</th></tr></thead>
+      <tbody>${L.acoes.map(x=>`<tr><td>${esc(x.papel)}${topHoje.has(x.papel)?"":' <span class="tag" title="Não está mais entre as 10 maiores notas hoje; continua na lista até o fim do mês.">fora do top 10 hoje</span>'}</td>
+        <td>${reais(x.preco_entrada)}</td><td>${reais(x.stop_loss)}</td><td>${reais(x.stop_gain)}</td>
+        <td>${x.posicao_pct!=null?num(x.posicao_pct,0)+"%":"—"}</td><td>${reais(x.preco_atual)}</td><td>${pct(x.ret_desde_entrada)}</td><td>${status(x)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${novas.length ? `<div class="sub" style="margin:10px 0 0">Entraram no top 10 depois da definição da lista: ${novas.map(esc).join(", ")}. Aparecem como Observar e entram na próxima lista se continuarem no top 10.</div>` : ""}`;
+}
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = v => v == null ? "—" : `<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
 const num = (v, d=1) => v == null ? "—" : v.toLocaleString("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -155,10 +191,16 @@ function render(){
     const rsi = a.rsi14 > 70 ? `<span class="tag">RSI ${a.rsi14.toFixed(0)} · esticada</span>` : "";
     return `<div class="acao">
       <div class="notas"><div class="nota" style="background:${corNota(a.nota_fund)}"><b>${a.nota_fund}</b><span>Fund.</span></div><div class="nota" style="background:${corNota(a.nota_tec)}"><b>${Math.round(a.nota_tec)}</b><span>Téc.</span></div></div>
-      <div class="nome"><strong>${esc(a.papel)}</strong><span class="pill s-${a.sinal}">${a.sinal}</span>${a.financeira?'<span class="tag" style="background:var(--neu-bg);color:var(--neu)">financeira</span>':''}${(a.alertas||[]).map(x=>`<span class="tag alerta" title="${esc(ALERTA[x][1])}">⚠ ${ALERTA[x][0]}</span>`).join("")}${rsi}
+      <div class="nome"><strong>${esc(a.papel)}</strong><span class="pill s-${a.sinal}">${a.sinal}</span>${a.financeira?'<span class="tag" style="background:var(--neu-bg);color:var(--neu)">financeira</span>':''}${a.top10_hoje && !a.lista ? '<span class="tag" style="background:var(--alta-bg);color:var(--alta)" title="Entre as 10 maiores notas hoje; entra na próxima lista se continuar">top 10 hoje</span>' : ""}${(a.alertas||[]).map(x=>`<span class="tag alerta" title="${esc(ALERTA[x][1])}">⚠ ${ALERTA[x][0]}</span>`).join("")}${rsi}
         <div class="preco">${a.stop_loss == null ? `R$ ${reais(a.preco ?? f.cotacao)} · ` : ""}liquidez R$ ${mi(f.liquidez)}/dia${a.historico_curto?" · histórico curto":""}</div></div>
       ${spark(a.sparkline)}
-      ${a.stop_loss != null ? `<div class="niveis">
+      ${a.lista ? `<div class="niveis">
+        <div class="niv"><span>Entrada (${dataBR(a.lista.definida_em)})</span><b>R$ ${reais(a.lista.preco_entrada)}</b><small>hoje ${reais(a.preco)}</small></div>
+        <div class="niv loss"><span>Stop loss do mês</span><b>R$ ${reais(a.lista.stop_loss)}</b><small class="neg">${num(a.lista.stop_loss_pct)}%</small></div>
+        <div class="niv gain"><span>Stop gain do mês</span><b>R$ ${reais(a.lista.stop_gain)}</b><small class="pos">+${num(a.lista.stop_gain_pct)}%</small></div>
+        <div class="niv tam"><span>Tamanho sugerido</span><b>${a.lista.posicao_pct!=null?num(a.lista.posicao_pct,0)+"%":"—"}</b><small>da carteira</small></div>
+        <div class="niv"><span>Situação</span>${status(a.lista)}</div>
+      </div>` : a.stop_loss != null ? `<div class="niveis">
         <div class="niv"><span>Cotação</span><b>R$ ${reais(a.preco)}</b></div>
         <div class="niv loss"><span>Stop loss</span><b>R$ ${reais(a.stop_loss)}</b><small class="neg">${num(a.stop_loss_pct)}%</small></div>
         <div class="niv gain"><span>Stop gain</span><b>R$ ${reais(a.stop_gain)}</b><small class="pos">+${num(a.stop_gain_pct)}%</small></div>
@@ -190,7 +232,7 @@ function carregar(j){
     const el = $("#clima"); el.hidden = false; el.className = "clima " + c.estado;
     el.innerHTML = `<b>${t[0]}</b>: ${t[1]} (${num(c.ibov,0)} pontos, ${c.ibov_dist_mm200>=0?"+":""}${num(c.ibov_dist_mm200)}% vs MM200 · 1 mês ${pct(c.ibov_ret_1m)})`;
   }
-  faixas(); render();
+  listaMes(j); faixas(); render();
 }
 
 $("#busca").oninput = render; $("#ordem").onchange = render;
