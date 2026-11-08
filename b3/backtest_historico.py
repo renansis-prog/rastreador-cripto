@@ -398,6 +398,46 @@ def main():
                  "vs_ibov_media": statistics.mean(vs[f]), "vs_ibov_mediana": statistics.median(vs[f])}
                 for f, v in faixas.items() if v]
 
+    # ---- diagnóstico de qualidade dos dados
+    diag_saltos = []
+    for m, d_ in P.items():
+        if m == "IBOV":
+            continue
+        a_ = d_["adj"]
+        for i in range(1, n):
+            x0, x1 = a_[i - 1], a_[i]
+            if x0 and x1 and x0 == x0 and x1 == x1:
+                r = x1 / x0 - 1
+                if abs(r) > 0.35:
+                    diag_saltos.append({"papel": m, "data": datas[i], "variacao": r * 100,
+                                        "fonte": "yahoo" if m in yh else "b3"})
+    diag_saltos.sort(key=lambda x: -abs(x["variacao"]))
+    print(f"Diagnóstico: {len(diag_saltos)} dias com variação acima de 35% (maiores abaixo)")
+    for x in diag_saltos[:40]:
+        print(f"   {x['papel']:7} {x['data']} {x['variacao']:+8.1f}% ({x['fonte']})")
+    # retorno médio no mês seguinte: ações que ainda existem x que saíram da bolsa
+    grupos = {"yahoo": [], "b3": []}
+    for i, e in ent.items():
+        j = i + MES
+        if j >= n:
+            continue
+        for m in e:
+            a0 = P[m]["adj"][i]
+            a1 = next((v for v in reversed(P[m]["adj"][i:j + 1]) if v == v and v), None)
+            if a0 and a1 and a0 == a0:
+                grupos["yahoo" if m in yh else "b3"].append((a1 / a0 - 1) * 100)
+    for k_, v_ in grupos.items():
+        if v_:
+            print(f"Diagnóstico: retorno médio no mês seguinte ({k_}): média {statistics.mean(v_):+.2f}% · mediana {statistics.median(v_):+.2f}% · {len(v_)} casos")
+    cobertura = {}
+    for i in rebal:
+        ano = datas[i][:4]
+        cobertura.setdefault(ano, []).append((len(ent.get(i, {})), len(universo[i])))
+    for ano, v_ in sorted(cobertura.items()):
+        print(f"Diagnóstico: {ano} avaliadas {statistics.mean(x for x, _ in v_):.0f} de {statistics.mean(y for _, y in v_):.0f} por mês")
+    sem_balanco = sorted({p for p in todos if p[:4] not in por_emp})
+    print(f"Diagnóstico: {len(sem_balanco)} ações sem balanço na CVM: {', '.join(sem_balanco[:60])}")
+
     # comparação com o teste que usa as ações de hoje, se existir
     comp = None
     antigo = RAIZ / "docs" / "b3" / "backtest_fund.json"
@@ -420,6 +460,10 @@ def main():
         "curvas": {"datas": datas[inicio:][::passo] + ([datas[-1]] if (n - 1 - inicio) % passo else []),
                    **{k: amostra(c) for k, c in curvas.items()}},
         "conferencia": [],
+        "diagnostico": {"saltos": diag_saltos[:200],
+                        "retorno_mes_seguinte": {k_: {"media": statistics.mean(v_), "mediana": statistics.median(v_), "n": len(v_)} for k_, v_ in grupos.items() if v_},
+                        "cobertura": {a_: statistics.mean(x for x, _ in v_) for a_, v_ in cobertura.items()},
+                        "sem_balanco": sem_balanco},
     }, ensure_ascii=False), encoding="utf-8")
     print("OK:", SAIDA)
 
