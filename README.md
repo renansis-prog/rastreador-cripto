@@ -63,7 +63,9 @@ Mesmo princípio, para ações da B3, juntando **fundamentos** (Fundamentus) e *
 Neutra (fundamentos 40–59) · Evitar (fundamentos < 40). A nota técnica é só informativa: nos testes ela não previu retorno.
 Cada ação mostra stop loss (2 ATR abaixo) e stop gain (4 ATR acima) e o preço justo de Graham.
 
-**Teste dos fundamentos** (`b3/fundamentos_cvm.py` + `b3/backtest_fund.py`): balanços históricos da CVM desde 2016,
+**Teste sem viés** (`b3/backtest_historico.py`, página `b3/historico.html`): universo das 120 ações mais negociadas de cada época pelo histórico oficial da B3 (COTAHIST), inclusive as que saíram da bolsa. Resultado de referência: a lista de Compra rendeu perto do Ibovespa (~10% a.a., 2017–2026).
+
+**Teste dos fundamentos com as ações de hoje** (otimista; `b3/fundamentos_cvm.py` + `b3/backtest_fund.py`): balanços históricos da CVM desde 2016,
 nota recalculada mês a mês só com o que já estava publicado. Resultados em `b3/fundamentos.html`.
 
 **Fundamentos (0–100):** P/L 0–15 (15) · P/VP ≤ 2 (10) · EV/EBIT 0–10 (15) · ROE ≥ 15% (15) · ROIC ≥ 10% (10) ·

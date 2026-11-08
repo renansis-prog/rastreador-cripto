@@ -116,6 +116,7 @@ function render(j){
 
   const g = grafico(j);
   $("#conteudo").outerHTML = `
+  <div class="aviso"><b>Este teste é otimista.</b> Ele usa só as ações que existem hoje, e isso infla o resultado. No <a href="historico.html">teste sem viés</a>, com as ações mais negociadas de cada época (inclusive as que saíram da bolsa), a mesma regra rendeu cerca de 10% ao ano, perto do Ibovespa.</div>
   <section class="card veredito">
     <h2>Resultado</h2>
     <p><b>Contra o CDI</b> (${pctTxt(cdi.retorno_anual)} ao ano): ${acimaCdi.length ? `${acimaCdi.length} de ${cand.length} estratégias renderam mais. A melhor, <b>${melhor.nome}</b>, fez ${pctTxt(melhor.retorno_anual)} ao ano, com queda máxima de ${pctTxt(melhor.queda_maxima)}.` : `nenhuma estratégia rendeu mais que o CDI. A melhor, <b>${melhor.nome}</b>, fez ${pctTxt(melhor.retorno_anual)} ao ano.`}</p>
