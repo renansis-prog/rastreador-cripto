@@ -209,7 +209,35 @@ def baixar_precos(tickers, periodo="15mo", ohlc=None):
         time.sleep(10 * (tentativa + 1))
     if df is None or df.empty:
         raise RuntimeError("Yahoo Finance não devolveu preços.")
-    out = {}
+    # O download em lote às vezes traz o índice atualizado e as ações paradas em dias anteriores.
+    # As ações cuja última data fica atrás da do Ibovespa são baixadas de novo, uma a uma.
+    try:
+        ultimo_ibov = df[INDICE]["Close"].dropna().index[-1]
+    except (KeyError, IndexError):
+        ultimo_ibov = None
+    if ultimo_ibov is not None:
+        atrasadas = []
+        for s in simbolos[:-1]:
+            try:
+                ult = df[s]["Close"].dropna().index[-1]
+            except (KeyError, IndexError):
+                continue
+            if ult < ultimo_ibov:
+                atrasadas.append(s)
+        if atrasadas:
+            print(f"Yahoo: {len(atrasadas)} ações vieram com dados antigos; baixando de novo uma a uma")
+            for s in atrasadas:
+                try:
+                    novo = yf.download(s, period=periodo, interval="1d", auto_adjust=False,
+                                       progress=False, multi_level_index=False)
+                except Exception:  # noqa: BLE001
+                    continue
+                if novo is None or novo.empty:
+                    continue
+                novo.columns = pd.MultiIndex.from_product([[s], novo.columns])
+                df = df.drop(columns=s, level=0, errors="ignore").join(novo, how="outer")
+                time.sleep(0.3)
+    out, desatualizadas = {}, []
     for s in simbolos:
         try:
             serie = df[s]["Adj Close"].dropna()
@@ -217,11 +245,16 @@ def baixar_precos(tickers, periodo="15mo", ohlc=None):
             continue
         if len(serie) >= 60:
             out[s.replace(".SA", "")] = serie
+            if ultimo_ibov is not None and s != INDICE and serie.index[-1] < ultimo_ibov:
+                desatualizadas.append(s.replace(".SA", ""))
             if ohlc is not None:
                 try:
                     ohlc[s.replace(".SA", "")] = df[s][["High", "Low", "Close"]].dropna()
                 except KeyError:
                     pass
+    if desatualizadas:
+        print(f"Atenção: {len(desatualizadas)} ações continuam sem o último pregão: {', '.join(desatualizadas[:20])}")
+    baixar_precos.desatualizadas = desatualizadas
     return out
 
 
@@ -506,6 +539,7 @@ def main():
     SAIDA.write_text(json.dumps({
         "atualizado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "pregao": pregao,
+        "acoes_desatualizadas": getattr(baixar_precos, "desatualizadas", []),
         "fonte": "Fundamentus (fundamentos) + Yahoo Finance (preços ajustados por proventos)",
         "parametros": {"liquidez_minima": LIQUIDEZ_MINIMA, "max_acoes": MAX_ACOES,
                        "pesos_tec": PESOS_TEC, "mult_atr_stop": MULT_ATR_STOP, "risco_retorno": RISCO_RETORNO,

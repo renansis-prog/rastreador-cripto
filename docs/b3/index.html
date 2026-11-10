@@ -232,6 +232,7 @@ function carregar(j){
     const el = $("#clima"); el.hidden = false; el.className = "clima " + c.estado;
     el.innerHTML = `<b>${t[0]}</b>: ${t[1]} (${num(c.ibov,0)} pontos, ${c.ibov_dist_mm200>=0?"+":""}${num(c.ibov_dist_mm200)}% vs MM200 · 1 mês ${pct(c.ibov_ret_1m)})`;
   }
+  if ((j.acoes_desatualizadas||[]).length){ const av=document.createElement("div"); av.className="aviso"; av.textContent=`Atenção: ${j.acoes_desatualizadas.length} ações vieram sem a cotação do último pregão (${j.acoes_desatualizadas.slice(0,8).join(", ")}${j.acoes_desatualizadas.length>8?"…":""}). Os números delas podem estar um dia atrasados.`; $("#clima").after(av); }
   listaMes(j); faixas(); render();
 }
 
